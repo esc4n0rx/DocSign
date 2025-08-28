@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,55 +19,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
+import { Usuario } from "@/types/auth"
 
-// Mock data para demonstração
-const mockUsuarios = [
-  {
-    id: 1,
-    nome: "Admin Sistema",
-    email: "admin@docmanager.com",
-    permissao: "Admin",
-    status: "Ativo",
-    ultimoAcesso: "2024-01-28",
-    dataCriacao: "2023-01-01",
-  },
-  {
-    id: 2,
-    nome: "Carlos Mendes",
-    email: "carlos.mendes@docmanager.com",
-    permissao: "Editor",
-    status: "Ativo",
-    ultimoAcesso: "2024-01-27",
-    dataCriacao: "2023-06-15",
-  },
-  {
-    id: 3,
-    nome: "Fernanda Lima",
-    email: "fernanda.lima@docmanager.com",
-    permissao: "Visualizador",
-    status: "Ativo",
-    ultimoAcesso: "2024-01-26",
-    dataCriacao: "2023-08-20",
-  },
-  {
-    id: 4,
-    nome: "Roberto Silva",
-    email: "roberto.silva@docmanager.com",
-    permissao: "Editor",
-    status: "Inativo",
-    ultimoAcesso: "2024-01-15",
-    dataCriacao: "2023-03-10",
-  },
-]
-
-interface Usuario {
-  id?: number
-  nome: string
-  email: string
-  permissao: string
-  status: string
-  ultimoAcesso?: string
-  dataCriacao?: string
+// Tipos e constantes movidos para o escopo do módulo
+interface UsuarioFormData extends Omit<Usuario, 'id' | 'created_at' | 'updated_at' | 'ultimo_acesso'> {
+  id?: string
   senha?: string
 }
 
@@ -92,164 +49,373 @@ const permissoes = [
   },
 ]
 
+const initialFormData: UsuarioFormData = {
+  nome: "",
+  email: "",
+  matricula: "",
+  permissao: "Visualizador",
+  status: "Ativo",
+  senha: "",
+}
+
+// Props para o novo componente de formulário independente
+interface UsuarioFormProps {
+  formData: UsuarioFormData
+  setFormData: React.Dispatch<React.SetStateAction<UsuarioFormData>>
+  onSubmit: () => void
+  onCancel: () => void
+  isSubmitting: boolean
+  submitText: string
+  isEdit?: boolean
+}
+
+// O componente do formulário agora é definido FORA do componente principal
+const UsuarioFormComponent = ({
+  formData,
+  setFormData,
+  onSubmit,
+  onCancel,
+  isSubmitting,
+  submitText,
+  isEdit,
+}: UsuarioFormProps) => (
+  <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="space-y-4">
+    <div className="grid grid-cols-1 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor="nome">Nome Completo</Label>
+        <Input
+          id="nome"
+          value={formData.nome}
+          onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+          placeholder="Digite o nome completo"
+          disabled={isSubmitting}
+          autoComplete="off"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="email">Email</Label>
+        <Input
+          id="email"
+          type="email"
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          placeholder="Digite o email"
+          disabled={isSubmitting}
+          autoComplete="off"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="matricula">Matrícula</Label>
+        <Input
+          id="matricula"
+          value={formData.matricula}
+          onChange={(e) => setFormData({ ...formData, matricula: e.target.value.toUpperCase() })}
+          placeholder="Digite a matrícula"
+          disabled={isSubmitting}
+          autoComplete="off"
+        />
+      </div>
+    </div>
+
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor="permissao">Permissão</Label>
+        <Select
+          value={formData.permissao}
+          onValueChange={(value) => setFormData({ ...formData, permissao: value as any })}
+          disabled={isSubmitting}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {permissoes.map((permissao) => (
+              <SelectItem key={permissao.value} value={permissao.value}>
+                <div className="flex flex-col">
+                  <span>{permissao.label}</span>
+                  <span className="text-xs text-muted-foreground">{permissao.description}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="status">Status</Label>
+        <Select
+          value={formData.status}
+          onValueChange={(value) => setFormData({ ...formData, status: value as any })}
+          disabled={isSubmitting}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Ativo">Ativo</SelectItem>
+            <SelectItem value="Inativo">Inativo</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+
+    <div className="space-y-2">
+      <Label htmlFor="senha">{isEdit ? "Nova Senha (deixe em branco para manter atual)" : "Senha"}</Label>
+      <Input
+        id="senha"
+        type="password"
+        value={formData.senha}
+        onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
+        placeholder={isEdit ? "Digite nova senha (opcional)" : "Digite a senha"}
+        disabled={isSubmitting}
+        autoComplete="new-password"
+      />
+    </div>
+
+    <div className="flex justify-end gap-2 pt-4">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onCancel}
+        disabled={isSubmitting}
+      >
+        Cancelar
+      </Button>
+      <Button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "Salvando..." : submitText}
+      </Button>
+    </div>
+  </form>
+)
+
 export function UsuariosSection() {
-  const [usuarios, setUsuarios] = useState(mockUsuarios)
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null)
-  const [formData, setFormData] = useState<Usuario>({
-    nome: "",
-    email: "",
-    permissao: "Visualizador",
-    status: "Ativo",
-    senha: "",
-  })
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { toast } = useToast()
+
+  const [formData, setFormData] = useState<UsuarioFormData>(initialFormData)
 
   const filteredUsuarios = usuarios.filter(
     (usuario) =>
       usuario.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
       usuario.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      usuario.matricula.toLowerCase().includes(searchTerm.toLowerCase()) ||
       usuario.permissao.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
-  const handleAddUsuario = () => {
-    const newUsuario = {
-      ...formData,
-      id: Math.max(...usuarios.map((u) => u.id)) + 1,
-      ultimoAcesso: "Nunca",
-      dataCriacao: new Date().toISOString().split("T")[0],
+  const loadUsuarios = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/auth/register')
+      if (response.ok) {
+        const data = await response.json()
+        setUsuarios(data.usuarios)
+      } else {
+        toast({
+          title: "Erro",
+          description: "Erro ao carregar usuários",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao carregar usuários:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar usuários",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
-    setUsuarios([...usuarios, newUsuario])
-    setFormData({
-      nome: "",
-      email: "",
-      permissao: "Visualizador",
-      status: "Ativo",
-      senha: "",
-    })
-    setIsAddDialogOpen(false)
   }
 
-  const handleEditUsuario = (usuario: (typeof mockUsuarios)[0]) => {
+  useEffect(() => {
+    loadUsuarios()
+  }, [])
+
+  const resetForm = () => {
+    setFormData(initialFormData)
+  }
+
+  const handleAddUsuario = async () => {
+    if (!formData.nome || !formData.email || !formData.matricula || !formData.senha) {
+      toast({
+        title: "Erro",
+        description: "Todos os campos são obrigatórios",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        toast({
+          title: "Sucesso",
+          description: "Usuário criado com sucesso",
+        })
+        resetForm()
+        setIsAddDialogOpen(false)
+        loadUsuarios()
+      } else {
+        toast({
+          title: "Erro",
+          description: data.error || "Erro ao criar usuário",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao criar usuário:', error)
+      toast({
+        title: "Erro",
+        description: "Erro interno do servidor",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleEditUsuario = (usuario: Usuario) => {
     setEditingUsuario(usuario)
     setFormData({ ...usuario, senha: "" })
     setIsEditDialogOpen(true)
   }
 
-  const handleUpdateUsuario = () => {
-    if (editingUsuario) {
-      setUsuarios(
-        usuarios.map((u) =>
-          u.id === editingUsuario.id ? { ...formData, id: editingUsuario.id, dataCriacao: u.dataCriacao } : u,
-        ),
-      )
-      setIsEditDialogOpen(false)
-      setEditingUsuario(null)
-      setFormData({
-        nome: "",
-        email: "",
-        permissao: "Visualizador",
-        status: "Ativo",
-        senha: "",
+  const handleUpdateUsuario = async () => {
+    if (!editingUsuario || !formData.nome || !formData.email || !formData.matricula) {
+      toast({
+        title: "Erro",
+        description: "Todos os campos são obrigatórios",
+        variant: "destructive",
       })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...formData,
+          id: editingUsuario.id,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        toast({
+          title: "Sucesso",
+          description: "Usuário atualizado com sucesso",
+        })
+        setIsEditDialogOpen(false)
+        setEditingUsuario(null)
+        resetForm()
+        loadUsuarios()
+      } else {
+        toast({
+          title: "Erro",
+          description: data.error || "Erro ao atualizar usuário",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar usuário:', error)
+      toast({
+        title: "Erro",
+        description: "Erro interno do servidor",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  const handleRemoveUsuario = (id: number) => {
-    setUsuarios(usuarios.filter((u) => u.id !== id))
+  const handleRemoveUsuario = async (usuario: Usuario) => {
+    try {
+      const response = await fetch(`/api/auth/register?id=${usuario.id}`, {
+        method: 'DELETE',
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        toast({
+          title: "Sucesso",
+          description: "Usuário removido com sucesso",
+        })
+        loadUsuarios()
+      } else {
+        toast({
+          title: "Erro",
+          description: data.error || "Erro ao remover usuário",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao remover usuário:', error)
+      toast({
+        title: "Erro",
+        description: "Erro interno do servidor",
+        variant: "destructive",
+      })
+    }
   }
 
   const getPermissaoInfo = (permissao: string) => {
     return permissoes.find((p) => p.value === permissao) || permissoes[2]
   }
 
-  const UsuarioForm = ({
-    onSubmit,
-    submitText,
-    isEdit,
-  }: { onSubmit: () => void; submitText: string; isEdit?: boolean }) => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="nome">Nome Completo</Label>
-          <Input
-            id="nome"
-            value={formData.nome}
-            onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-            placeholder="Digite o nome completo"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            placeholder="Digite o email"
-          />
-        </div>
-      </div>
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('pt-BR')
+  }
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="permissao">Permissão</Label>
-          <Select value={formData.permissao} onValueChange={(value) => setFormData({ ...formData, permissao: value })}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {permissoes.map((permissao) => (
-                <SelectItem key={permissao.value} value={permissao.value}>
-                  <div className="flex flex-col">
-                    <span>{permissao.label}</span>
-                    <span className="text-xs text-muted-foreground">{permissao.description}</span>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+  const handleCloseAddDialog = (open: boolean) => {
+    setIsAddDialogOpen(open)
+    if (!open) {
+      resetForm()
+    }
+  }
+
+  const handleCloseEditDialog = (open: boolean) => {
+    setIsEditDialogOpen(open)
+    if (!open) {
+      setEditingUsuario(null)
+      resetForm()
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-semibold text-foreground text-balance">Usuários</h1>
+          <p className="text-muted-foreground mt-2 text-pretty">Gerencie administradores do sistema</p>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="status">Status</Label>
-          <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Ativo">Ativo</SelectItem>
-              <SelectItem value="Inativo">Inativo</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="senha">{isEdit ? "Nova Senha (deixe em branco para manter atual)" : "Senha"}</Label>
-        <Input
-          id="senha"
-          type="password"
-          value={formData.senha}
-          onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
-          placeholder={isEdit ? "Digite nova senha (opcional)" : "Digite a senha"}
-        />
-      </div>
-
-      <div className="flex justify-end gap-2 pt-4">
-        <Button
-          variant="outline"
-          onClick={() => {
-            setIsAddDialogOpen(false)
-            setIsEditDialogOpen(false)
-          }}
-        >
-          Cancelar
-        </Button>
-        <Button onClick={onSubmit}>{submitText}</Button>
-      </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -258,7 +424,7 @@ export function UsuariosSection() {
           <h1 className="text-3xl font-semibold text-foreground text-balance">Usuários</h1>
           <p className="text-muted-foreground mt-2 text-pretty">Gerencie administradores do sistema</p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <Dialog open={isAddDialogOpen} onOpenChange={handleCloseAddDialog}>
           <DialogTrigger asChild>
             <Button className="gap-2">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -271,7 +437,14 @@ export function UsuariosSection() {
             <DialogHeader>
               <DialogTitle>Adicionar Novo Usuário</DialogTitle>
             </DialogHeader>
-            <UsuarioForm onSubmit={handleAddUsuario} submitText="Adicionar Usuário" />
+            <UsuarioFormComponent
+              formData={formData}
+              setFormData={setFormData}
+              onSubmit={handleAddUsuario}
+              onCancel={() => handleCloseAddDialog(false)}
+              isSubmitting={isSubmitting}
+              submitText="Adicionar Usuário"
+            />
           </DialogContent>
         </Dialog>
       </div>
@@ -281,7 +454,7 @@ export function UsuariosSection() {
         <CardContent className="pt-6">
           <div className="flex gap-4">
             <Input
-              placeholder="Buscar por nome, email ou permissão..."
+              placeholder="Buscar por nome, email, matrícula ou permissão..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-1"
@@ -321,6 +494,8 @@ export function UsuariosSection() {
           <div className="space-y-3">
             {filteredUsuarios.map((usuario) => {
               const permissaoInfo = getPermissaoInfo(usuario.permissao)
+              const isMaster = usuario.matricula === 'MASTER001'
+
               return (
                 <div
                   key={usuario.id}
@@ -339,15 +514,18 @@ export function UsuariosSection() {
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-1">
                         <h3 className="font-medium text-foreground">{usuario.nome}</h3>
+                        {isMaster && <Badge variant="secondary">Master</Badge>}
                         <Badge variant={usuario.status === "Ativo" ? "default" : "destructive"}>{usuario.status}</Badge>
                         <Badge variant={permissaoInfo.color}>{permissaoInfo.label}</Badge>
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                         <span>{usuario.email}</span>
-                        <span>•</span>
-                        <span>Último acesso: {usuario.ultimoAcesso}</span>
-                        <span>•</span>
-                        <span>Criado em: {usuario.dataCriacao}</span>
+                        <span className="hidden md:inline">•</span>
+                        <span>Matrícula: {usuario.matricula}</span>
+                        <span className="hidden md:inline">•</span>
+                        <span>Último acesso: {usuario.ultimo_acesso ? formatDate(usuario.ultimo_acesso) : 'Nunca'}</span>
+                        <span className="hidden md:inline">•</span>
+                        <span>Criado em: {formatDate(usuario.created_at)}</span>
                       </div>
                     </div>
                   </div>
@@ -364,7 +542,7 @@ export function UsuariosSection() {
                       </svg>
                       Editar
                     </Button>
-                    {usuario.id !== 1 && ( // Não permitir remover o admin principal
+                    {!isMaster && ( // Não permitir remover o usuário master
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button variant="destructive" size="sm" className="gap-2">
@@ -390,7 +568,7 @@ export function UsuariosSection() {
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancelar</AlertDialogCancel>
                             <AlertDialogAction
-                              onClick={() => handleRemoveUsuario(usuario.id)}
+                              onClick={() => handleRemoveUsuario(usuario)}
                               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             >
                               Remover
@@ -405,7 +583,7 @@ export function UsuariosSection() {
             })}
           </div>
 
-          {filteredUsuarios.length === 0 && (
+          {filteredUsuarios.length === 0 && !isLoading && (
             <div className="text-center py-12">
               <svg
                 className="h-12 w-12 mx-auto mb-4 text-muted-foreground"
@@ -424,7 +602,7 @@ export function UsuariosSection() {
               <p className="text-muted-foreground">
                 {searchTerm
                   ? `Não encontramos usuários com o termo "${searchTerm}"`
-                  : "Adicione o primeiro usuário ao sistema"}
+                  : "Nenhum usuário cadastrado no sistema"}
               </p>
             </div>
           )}
@@ -432,12 +610,20 @@ export function UsuariosSection() {
       </Card>
 
       {/* Dialog de Edição */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog open={isEditDialogOpen} onOpenChange={handleCloseEditDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Editar Usuário</DialogTitle>
           </DialogHeader>
-          <UsuarioForm onSubmit={handleUpdateUsuario} submitText="Salvar Alterações" isEdit />
+          <UsuarioFormComponent
+            formData={formData}
+            setFormData={setFormData}
+            onSubmit={handleUpdateUsuario}
+            onCancel={() => handleCloseEditDialog(false)}
+            isSubmitting={isSubmitting}
+            submitText="Salvar Alterações"
+            isEdit
+          />
         </DialogContent>
       </Dialog>
     </div>

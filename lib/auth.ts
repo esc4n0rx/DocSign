@@ -135,3 +135,69 @@ export function verifyJWT(token: string): any {
     return null
   }
 }
+
+// Função adicional para criar usuários (nova)
+export async function createUser(userData: {
+  nome: string
+  email: string
+  matricula: string
+  permissao: 'Admin' | 'Editor' | 'Visualizador'
+  status: 'Ativo' | 'Inativo'
+  senha: string
+}): Promise<{ success: boolean; user?: any; error?: string }> {
+  try {
+    const serviceSupabase = createServiceClient()
+    
+    // Verificar se matrícula já existe
+    const { data: existingUser } = await serviceSupabase
+      .from('usuarios')
+      .select('matricula')
+      .eq('matricula', userData.matricula)
+      .single()
+
+    if (existingUser) {
+      return { success: false, error: 'Matrícula já cadastrada' }
+    }
+
+    // Criar usuário no Supabase Auth
+    const { data: authUser, error: authError } = await serviceSupabase.auth.admin.createUser({
+      email: userData.email,
+      password: userData.senha,
+      email_confirm: true,
+      user_metadata: { 
+        matricula: userData.matricula, 
+        nome: userData.nome 
+      }
+    })
+
+    if (authError || !authUser.user) {
+      return { success: false, error: authError?.message || 'Erro ao criar usuário no auth' }
+    }
+
+    // Criar registro na tabela usuarios
+    const { data: usuario, error: usuarioError } = await serviceSupabase
+      .from('usuarios')
+      .insert({
+        id: authUser.user.id,
+        matricula: userData.matricula,
+        nome: userData.nome,
+        email: userData.email,
+        permissao: userData.permissao,
+        status: userData.status
+      })
+      .select()
+      .single()
+
+    if (usuarioError) {
+      // Se falhou, limpar o usuário do auth
+      await serviceSupabase.auth.admin.deleteUser(authUser.user.id)
+      return { success: false, error: 'Erro ao salvar dados do usuário' }
+    }
+
+    return { success: true, user: usuario }
+    
+  } catch (error) {
+    console.error('Erro ao criar usuário:', error)
+    return { success: false, error: 'Erro interno do servidor' }
+  }
+}
