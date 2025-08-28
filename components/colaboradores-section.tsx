@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,266 +19,487 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
+import { Colaborador, ColaboradorFormData } from "@/types/colaborador"
 
-// Mock data para demonstração
-const mockColaboradores = [
-  {
-    id: 1,
-    nome: "João Silva Santos",
-    matricula: "12345",
-    cargo: "Desenvolvedor Senior",
-    departamento: "TI",
-    status: "Ativo",
-    email: "joao.silva@empresa.com",
-    telefone: "(11) 99999-9999",
-    dataAdmissao: "2023-01-15",
-    documentosCount: 3,
-  },
-  {
-    id: 2,
-    nome: "Maria Santos Oliveira",
-    matricula: "67890",
-    cargo: "Analista de RH",
-    departamento: "Recursos Humanos",
-    status: "Ativo",
-    email: "maria.santos@empresa.com",
-    telefone: "(11) 88888-8888",
-    dataAdmissao: "2023-02-01",
-    documentosCount: 2,
-  },
-  {
-    id: 3,
-    nome: "Pedro Costa Lima",
-    matricula: "11111",
-    cargo: "Gerente de Vendas",
-    departamento: "Comercial",
-    status: "Inativo",
-    email: "pedro.costa@empresa.com",
-    telefone: "(11) 77777-7777",
-    dataAdmissao: "2022-06-10",
-    documentosCount: 5,
-  },
-  {
-    id: 4,
-    nome: "Ana Paula Ferreira",
-    matricula: "22222",
-    cargo: "Designer UX/UI",
-    departamento: "Design",
-    status: "Ativo",
-    email: "ana.ferreira@empresa.com",
-    telefone: "(11) 66666-6666",
-    dataAdmissao: "2023-03-20",
-    documentosCount: 4,
-  },
+const departamentos = [
+  "TI",
+  "Recursos Humanos", 
+  "Comercial",
+  "Design",
+  "Financeiro",
+  "Marketing",
+  "Operações",
+  "Administrativo"
 ]
 
-interface Colaborador {
-  id?: number
-  nome: string
-  matricula: string
-  cargo: string
-  departamento: string
-  status: string
-  email: string
-  telefone: string
-  dataAdmissao: string
-  documentosCount?: number
+const statusOptions: Array<Colaborador['status']> = [
+  "Ativo",
+  "Inativo",
+  "Férias", 
+  "Licença Médica"
+]
+
+const initialFormData: ColaboradorFormData = {
+  nome: "",
+  matricula: "",
+  cargo: "",
+  departamento: "",
+  status: "Ativo",
+  email: "",
+  telefone: "",
+  data_admissao: "",
 }
 
+interface ColaboradorFormProps {
+  formData: ColaboradorFormData
+  setFormData: React.Dispatch<React.SetStateAction<ColaboradorFormData>>
+  onSubmit: () => void
+  onCancel: () => void
+  isSubmitting: boolean
+  submitText: string
+  isEdit?: boolean
+}
+
+const ColaboradorFormComponent = ({
+  formData,
+  setFormData,
+  onSubmit,
+  onCancel,
+  isSubmitting,
+  submitText,
+  isEdit,
+}: ColaboradorFormProps) => (
+  <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="space-y-4">
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor="nome">Nome Completo</Label>
+        <Input
+          id="nome"
+          value={formData.nome}
+          onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+          placeholder="Digite o nome completo"
+          disabled={isSubmitting}
+          required
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="matricula">Matrícula</Label>
+        <Input
+          id="matricula"
+          value={formData.matricula}
+          onChange={(e) => setFormData({ ...formData, matricula: e.target.value.toUpperCase() })}
+          placeholder="Digite a matrícula"
+          disabled={isSubmitting}
+          required
+        />
+      </div>
+    </div>
+
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor="cargo">Cargo</Label>
+        <Input
+          id="cargo"
+          value={formData.cargo}
+          onChange={(e) => setFormData({ ...formData, cargo: e.target.value })}
+          placeholder="Digite o cargo"
+          disabled={isSubmitting}
+          required
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="departamento">Departamento</Label>
+        <Select
+          value={formData.departamento}
+          onValueChange={(value) => setFormData({ ...formData, departamento: value })}
+          disabled={isSubmitting}
+          required
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione o departamento" />
+          </SelectTrigger>
+          <SelectContent>
+            {departamentos.map((dept) => (
+              <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+      <Label htmlFor="email">Email</Label>
+        <Input
+          id="email"
+          type="email"
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          placeholder="Digite o email"
+          disabled={isSubmitting}
+          required
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="telefone">Telefone</Label>
+        <Input
+          id="telefone"
+          value={formData.telefone || ""}
+          onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+          placeholder="(11) 99999-9999"
+          disabled={isSubmitting}
+        />
+      </div>
+    </div>
+
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor="dataAdmissao">Data de Admissão</Label>
+        <Input
+          id="dataAdmissao"
+          type="date"
+          value={formData.data_admissao}
+          onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })}
+          disabled={isSubmitting}
+          required
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="status">Status</Label>
+        <Select 
+          value={formData.status} 
+          onValueChange={(value: Colaborador['status']) => setFormData({ ...formData, status: value })}
+          disabled={isSubmitting}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {statusOptions.map((status) => (
+              <SelectItem key={status} value={status}>{status}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+
+    <div className="flex justify-end gap-2 pt-4">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onCancel}
+        disabled={isSubmitting}
+      >
+        Cancelar
+      </Button>
+      <Button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "Salvando..." : submitText}
+      </Button>
+    </div>
+  </form>
+)
+
 export function ColaboradoresSection() {
-  const [colaboradores, setColaboradores] = useState(mockColaboradores)
+  const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingColaborador, setEditingColaborador] = useState<Colaborador | null>(null)
-  const [formData, setFormData] = useState<Colaborador>({
-    nome: "",
-    matricula: "",
-    cargo: "",
-    departamento: "",
-    status: "Ativo",
-    email: "",
-    telefone: "",
-    dataAdmissao: "",
-  })
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { toast } = useToast()
+
+  const [formData, setFormData] = useState<ColaboradorFormData>(initialFormData)
 
   const filteredColaboradores = colaboradores.filter(
     (colaborador) =>
       colaborador.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      colaborador.matricula.includes(searchTerm) ||
+      colaborador.matricula.toLowerCase().includes(searchTerm.toLowerCase()) ||
       colaborador.cargo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      colaborador.departamento.toLowerCase().includes(searchTerm.toLowerCase()),
+      colaborador.departamento.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      colaborador.email.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
-  const handleAddColaborador = () => {
-    const newColaborador = {
-      ...formData,
-      id: Math.max(...colaboradores.map((c) => c.id)) + 1,
-      documentosCount: 0,
+  const loadColaboradores = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/colaboradores')
+      const data = await response.json()
+      
+      if (data.success) {
+        setColaboradores(data.colaboradores)
+      } else {
+        toast({
+          title: "Erro",
+          description: data.error || "Erro ao carregar colaboradores",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao carregar colaboradores:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar colaboradores",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
-    setColaboradores([...colaboradores, newColaborador])
-    setFormData({
-      nome: "",
-      matricula: "",
-      cargo: "",
-      departamento: "",
-      status: "Ativo",
-      email: "",
-      telefone: "",
-      dataAdmissao: "",
-    })
-    setIsAddDialogOpen(false)
   }
 
-  const handleEditColaborador = (colaborador: (typeof mockColaboradores)[0]) => {
+  useEffect(() => {
+    loadColaboradores()
+  }, [])
+
+  const resetForm = () => {
+    setFormData(initialFormData)
+  }
+
+  const validateForm = () => {
+    if (!formData.nome.trim()) {
+      toast({
+        title: "Erro",
+        description: "Nome é obrigatório",
+        variant: "destructive",
+      })
+      return false
+    }
+    
+    if (!formData.matricula.trim()) {
+      toast({
+        title: "Erro",
+        description: "Matrícula é obrigatória",
+        variant: "destructive",
+      })
+      return false
+    }
+    
+    if (!formData.email.trim()) {
+      toast({
+        title: "Erro",
+        description: "Email é obrigatório",
+        variant: "destructive",
+      })
+      return false
+    }
+    
+    if (!formData.cargo.trim()) {
+      toast({
+        title: "Erro",
+        description: "Cargo é obrigatório",
+        variant: "destructive",
+      })
+      return false
+    }
+    
+    if (!formData.departamento) {
+      toast({
+        title: "Erro",
+        description: "Departamento é obrigatório",
+        variant: "destructive",
+      })
+      return false
+    }
+    
+    if (!formData.data_admissao) {
+      toast({
+        title: "Erro",
+        description: "Data de admissão é obrigatória",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    return true
+  }
+
+  const handleAddColaborador = async () => {
+    if (!validateForm()) return
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch('/api/colaboradores', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Sucesso",
+          description: `Colaborador criado com sucesso${data.cloudinaryResult?.success ? ' e pasta no Cloudinary criada' : ''}`,
+        })
+        resetForm()
+        setIsAddDialogOpen(false)
+        loadColaboradores()
+      } else {
+        toast({
+          title: "Erro",
+          description: data.error || "Erro ao criar colaborador",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao criar colaborador:', error)
+      toast({
+        title: "Erro",
+        description: "Erro interno do servidor",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleEditColaborador = (colaborador: Colaborador) => {
     setEditingColaborador(colaborador)
-    setFormData(colaborador)
+    setFormData({
+      nome: colaborador.nome,
+      matricula: colaborador.matricula,
+      cargo: colaborador.cargo,
+      departamento: colaborador.departamento,
+      status: colaborador.status,
+      email: colaborador.email,
+      telefone: colaborador.telefone || "",
+      data_admissao: colaborador.data_admissao,
+    })
     setIsEditDialogOpen(true)
   }
 
-  const handleUpdateColaborador = () => {
-    if (editingColaborador) {
-      setColaboradores(
-        colaboradores.map((c) => (c.id === editingColaborador.id ? { ...formData, id: editingColaborador.id } : c)),
-      )
-      setIsEditDialogOpen(false)
-      setEditingColaborador(null)
-      setFormData({
-        nome: "",
-        matricula: "",
-        cargo: "",
-        departamento: "",
-        status: "Ativo",
-        email: "",
-        telefone: "",
-        dataAdmissao: "",
+  const handleUpdateColaborador = async () => {
+    if (!editingColaborador || !validateForm()) return
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch('/api/colaboradores', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...formData,
+          id: editingColaborador.id,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Sucesso",
+          description: "Colaborador atualizado com sucesso",
+        })
+        setIsEditDialogOpen(false)
+        setEditingColaborador(null)
+        resetForm()
+        loadColaboradores()
+      } else {
+        toast({
+          title: "Erro",
+          description: data.error || "Erro ao atualizar colaborador",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar colaborador:', error)
+      toast({
+        title: "Erro",
+        description: "Erro interno do servidor",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleRemoveColaborador = async (colaborador: Colaborador) => {
+    try {
+      const response = await fetch(`/api/colaboradores/${colaborador.id}`, {
+        method: 'DELETE',
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Sucesso",
+          description: "Colaborador removido com sucesso",
+        })
+        loadColaboradores()
+      } else {
+        toast({
+          title: "Erro",
+          description: data.error || "Erro ao remover colaborador",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao remover colaborador:', error)
+      toast({
+        title: "Erro",
+        description: "Erro interno do servidor",
+        variant: "destructive",
       })
     }
   }
 
-  const handleRemoveColaborador = (id: number) => {
-    setColaboradores(colaboradores.filter((c) => c.id !== id))
-  }
-
-  const handleViewDocuments = (colaborador: (typeof mockColaboradores)[0]) => {
-    // Redirecionar para a seção de consultas com o colaborador selecionado
+  const handleViewDocuments = (colaborador: Colaborador) => {
+    // TODO: Navegar para seção de consultas com colaborador selecionado
     console.log(`Visualizar documentos de: ${colaborador.nome}`)
   }
 
-  const ColaboradorForm = ({ onSubmit, submitText }: { onSubmit: () => void; submitText: string }) => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="nome">Nome Completo</Label>
-          <Input
-            id="nome"
-            value={formData.nome}
-            onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-            placeholder="Digite o nome completo"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="matricula">Matrícula</Label>
-          <Input
-            id="matricula"
-            value={formData.matricula}
-            onChange={(e) => setFormData({ ...formData, matricula: e.target.value })}
-            placeholder="Digite a matrícula"
-          />
-        </div>
-      </div>
+  const formatDate = (dateString: string) => {
+    return new Date(dateString + 'T00:00:00').toLocaleDateString('pt-BR')
+  }
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="cargo">Cargo</Label>
-          <Input
-            id="cargo"
-            value={formData.cargo}
-            onChange={(e) => setFormData({ ...formData, cargo: e.target.value })}
-            placeholder="Digite o cargo"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="departamento">Departamento</Label>
-          <Select
-            value={formData.departamento}
-            onValueChange={(value) => setFormData({ ...formData, departamento: value })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione o departamento" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="TI">TI</SelectItem>
-              <SelectItem value="Recursos Humanos">Recursos Humanos</SelectItem>
-              <SelectItem value="Comercial">Comercial</SelectItem>
-              <SelectItem value="Design">Design</SelectItem>
-              <SelectItem value="Financeiro">Financeiro</SelectItem>
-              <SelectItem value="Marketing">Marketing</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+  const getStatusVariant = (status: Colaborador['status']) => {
+    switch (status) {
+      case 'Ativo':
+        return 'default' as const
+      case 'Férias':
+        return 'secondary' as const
+      case 'Licença Médica':
+        return 'outline' as const
+      case 'Inativo':
+        return 'destructive' as const
+      default:
+        return 'outline' as const
+    }
+  }
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            placeholder="Digite o email"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="telefone">Telefone</Label>
-          <Input
-            id="telefone"
-            value={formData.telefone}
-            onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
-            placeholder="(11) 99999-9999"
-          />
-        </div>
-      </div>
+  const handleCloseAddDialog = (open: boolean) => {
+    setIsAddDialogOpen(open)
+    if (!open) {
+      resetForm()
+    }
+  }
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="dataAdmissao">Data de Admissão</Label>
-          <Input
-            id="dataAdmissao"
-            type="date"
-            value={formData.dataAdmissao}
-            onChange={(e) => setFormData({ ...formData, dataAdmissao: e.target.value })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="status">Status</Label>
-          <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Ativo">Ativo</SelectItem>
-              <SelectItem value="Inativo">Inativo</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+  const handleCloseEditDialog = (open: boolean) => {
+    setIsEditDialogOpen(open)
+    if (!open) {
+      setEditingColaborador(null)
+      resetForm()
+    }
+  }
 
-      <div className="flex justify-end gap-2 pt-4">
-        <Button
-          variant="outline"
-          onClick={() => {
-            setIsAddDialogOpen(false)
-            setIsEditDialogOpen(false)
-          }}
-        >
-          Cancelar
-        </Button>
-        <Button onClick={onSubmit}>{submitText}</Button>
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-semibold text-foreground text-balance">Colaboradores</h1>
+          <p className="text-muted-foreground mt-2 text-pretty">Gerencie todos os colaboradores do sistema</p>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -287,7 +508,7 @@ export function ColaboradoresSection() {
           <h1 className="text-3xl font-semibold text-foreground text-balance">Colaboradores</h1>
           <p className="text-muted-foreground mt-2 text-pretty">Gerencie todos os colaboradores do sistema</p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <Dialog open={isAddDialogOpen} onOpenChange={handleCloseAddDialog}>
           <DialogTrigger asChild>
             <Button className="gap-2">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -300,7 +521,14 @@ export function ColaboradoresSection() {
             <DialogHeader>
               <DialogTitle>Adicionar Novo Colaborador</DialogTitle>
             </DialogHeader>
-            <ColaboradorForm onSubmit={handleAddColaborador} submitText="Adicionar Colaborador" />
+            <ColaboradorFormComponent
+              formData={formData}
+              setFormData={setFormData}
+              onSubmit={handleAddColaborador}
+              onCancel={() => handleCloseAddDialog(false)}
+              isSubmitting={isSubmitting}
+              submitText="Adicionar Colaborador"
+            />
           </DialogContent>
         </Dialog>
       </div>
@@ -310,7 +538,7 @@ export function ColaboradoresSection() {
         <CardContent className="pt-6">
           <div className="flex gap-4">
             <Input
-              placeholder="Buscar por nome, matrícula, cargo ou departamento..."
+              placeholder="Buscar por nome, matrícula, cargo, departamento ou email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-1"
@@ -347,18 +575,29 @@ export function ColaboradoresSection() {
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1">
                       <h3 className="font-medium text-foreground">{colaborador.nome}</h3>
-                      <Badge variant={colaborador.status === "Ativo" ? "default" : "destructive"}>
+                      <Badge variant={getStatusVariant(colaborador.status)}>
                         {colaborador.status}
                       </Badge>
+                      {colaborador.cloudinary_folder && (
+                        <Badge variant="outline" className="text-xs">
+                          <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m8 10l4 4 4-4" />
+                          </svg>
+                          Pasta Criada
+                        </Badge>
+                      )}
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                       <span>Matrícula: {colaborador.matricula}</span>
-                      <span>•</span>
+                      <span className="hidden md:inline">•</span>
                       <span>{colaborador.cargo}</span>
-                      <span>•</span>
+                      <span className="hidden md:inline">•</span>
                       <span>{colaborador.departamento}</span>
-                      <span>•</span>
-                      <span>{colaborador.documentosCount} documento(s)</span>
+                      <span className="hidden md:inline">•</span>
+                      <span>{colaborador.email}</span>
+                      <span className="hidden md:inline">•</span>
+                      <span>Admissão: {formatDate(colaborador.data_admissao)}</span>
                     </div>
                   </div>
                 </div>
@@ -415,13 +654,13 @@ export function ColaboradoresSection() {
                         <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
                         <AlertDialogDescription>
                           Tem certeza que deseja remover o colaborador "{colaborador.nome}"? Esta ação não pode ser
-                          desfeita e todos os documentos associados serão perdidos.
+                          desfeita e todos os documentos associados no Banco de Dados também serão removidos.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
                         <AlertDialogAction
-                          onClick={() => handleRemoveColaborador(colaborador.id)}
+                          onClick={() => handleRemoveColaborador(colaborador)}
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                           Remover
@@ -434,7 +673,7 @@ export function ColaboradoresSection() {
             ))}
           </div>
 
-          {filteredColaboradores.length === 0 && (
+          {filteredColaboradores.length === 0 && !isLoading && (
             <div className="text-center py-12">
               <svg
                 className="h-12 w-12 mx-auto mb-4 text-muted-foreground"
@@ -461,12 +700,20 @@ export function ColaboradoresSection() {
       </Card>
 
       {/* Dialog de Edição */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog open={isEditDialogOpen} onOpenChange={handleCloseEditDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Editar Colaborador</DialogTitle>
           </DialogHeader>
-          <ColaboradorForm onSubmit={handleUpdateColaborador} submitText="Salvar Alterações" />
+          <ColaboradorFormComponent
+            formData={formData}
+            setFormData={setFormData}
+            onSubmit={handleUpdateColaborador}
+            onCancel={() => handleCloseEditDialog(false)}
+            isSubmitting={isSubmitting}
+            submitText="Salvar Alterações"
+            isEdit
+          />
         </DialogContent>
       </Dialog>
     </div>

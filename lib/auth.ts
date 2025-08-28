@@ -6,19 +6,18 @@ import jwt from 'jsonwebtoken'
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key'
 
 // Cliente com service role para operações administrativas
-function createServiceClient() {
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        getAll() { return [] },
-        setAll() {},
-      },
-    }
-  )
-}
-
+export function createServiceClient() {
+    return createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        cookies: {
+          getAll() { return [] },
+          setAll() {},
+        },
+      }
+    )
+  }
 export async function getAuthUser(): Promise<AuthUser | null> {
   const supabase = await createClient()
   
@@ -30,7 +29,6 @@ export async function getAuthUser(): Promise<AuthUser | null> {
       return null
     }
 
-    // Usar service client para buscar dados do usuário (bypassa RLS)
     const serviceSupabase = createServiceClient()
     const { data: usuarioData, error: usuarioError } = await serviceSupabase
       .from('usuarios')
