@@ -1,32 +1,60 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { useRouter } from "next/navigation"
+import { useAuth } from "@/contexts/AuthContext"
+import { useToast } from "@/hooks/use-toast"
 
 export function LoginForm() {
   const [matricula, setMatricula] = useState("")
   const [senha, setSenha] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
+  const { login } = useAuth()
+  const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!matricula || !senha) {
+      toast({
+        title: "Erro",
+        description: "Por favor, preencha todos os campos",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsLoading(true)
 
-    // Simulação de autenticação
-    setTimeout(() => {
-      if (matricula && senha) {
-        // Redirecionar para o dashboard
-        router.push("/dashboard")
+    try {
+      const success = await login({ matricula, senha })
+
+      if (success) {
+        toast({
+          title: "Sucesso",
+          description: "Login realizado com sucesso!",
+        })
+      } else {
+        toast({
+          title: "Erro",
+          description: "Matrícula ou senha incorretos",
+          variant: "destructive",
+        })
       }
+    } catch (error) {
+      console.error('Erro no login:', error)
+      toast({
+        title: "Erro",
+        description: "Erro interno. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
   }
 
   return (
@@ -45,9 +73,10 @@ export function LoginForm() {
               type="text"
               placeholder="Digite sua matrícula"
               value={matricula}
-              onChange={(e) => setMatricula(e.target.value)}
+              onChange={(e) => setMatricula(e.target.value.toUpperCase())}
               className="bg-input border-border text-foreground placeholder:text-muted-foreground"
               required
+              disabled={isLoading}
             />
           </div>
 
@@ -63,6 +92,7 @@ export function LoginForm() {
               onChange={(e) => setSenha(e.target.value)}
               className="bg-input border-border text-foreground placeholder:text-muted-foreground"
               required
+              disabled={isLoading}
             />
           </div>
 

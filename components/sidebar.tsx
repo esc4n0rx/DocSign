@@ -3,6 +3,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/contexts/AuthContext"
 
 const menuItems = [
   {
@@ -46,6 +47,7 @@ const menuItems = [
         />
       </svg>
     ),
+    adminOnly: true,
   },
   {
     name: "Configurações",
@@ -61,11 +63,24 @@ const menuItems = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     ),
+    adminOnly: true,
   },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { user, logout } = useAuth()
+
+  const filteredMenuItems = menuItems.filter(item => {
+    if (item.adminOnly) {
+      return user?.usuario?.permissao === 'Admin'
+    }
+    return true
+  })
+
+  const handleLogout = () => {
+    logout()
+  }
 
   return (
     <div className="fixed left-0 top-0 h-full w-64 bg-sidebar border-r border-sidebar-border">
@@ -98,7 +113,7 @@ export function Sidebar() {
         {/* Menu de Navegação */}
         <nav className="flex-1 p-4">
           <div className="space-y-2">
-            {menuItems.map((item) => {
+            {filteredMenuItems.map((item) => {
               const isActive = pathname === item.href
               return (
                 <Link key={item.href} href={item.href}>
@@ -120,15 +135,37 @@ export function Sidebar() {
 
         {/* Footer da Sidebar */}
         <div className="p-4 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 p-2">
+          <div className="flex items-center gap-3 p-2 mb-2">
             <div className="h-8 w-8 bg-muted rounded-full flex items-center justify-center">
-              <span className="text-sm font-medium text-muted-foreground">U</span>
+              <span className="text-sm font-medium text-muted-foreground">
+                {user?.usuario?.nome?.split(' ').map(n => n[0]).join('').slice(0, 2) || 'U'}
+              </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">Usuário Admin</p>
-              <p className="text-xs text-muted-foreground truncate">admin@docmanager.com</p>
+              <p className="text-sm font-medium text-sidebar-foreground truncate">
+                {user?.usuario?.nome || 'Usuário'}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {user?.usuario?.matricula || 'N/A'} • {user?.usuario?.permissao || 'N/A'}
+              </p>
             </div>
           </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleLogout}
+            className="w-full gap-2"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
+            Sair
+          </Button>
         </div>
       </div>
     </div>
