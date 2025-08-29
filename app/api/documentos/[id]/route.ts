@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/auth'
+import { downloadFile } from '@/lib/storage-api'
 
-
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const supabase = await createClient()
     
@@ -17,7 +17,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       )
     }
 
-    const documentoId = parseInt(params.id)
+    // Aguardar params antes de usar suas propriedades
+    const resolvedParams = await params
+    const documentoId = parseInt(resolvedParams.id)
 
     if (isNaN(documentoId)) {
       return NextResponse.json(
@@ -28,35 +30,71 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const serviceSupabase = createServiceClient()
 
-    // Buscar documento com dados do colaborador
+    // Buscar documento
     const { data: documento, error } = await serviceSupabase
       .from('documentos')
-      .select(`
-        *,
-        colaborador:colaboradores!inner(id, nome, matricula)
-      `)
+      .select('*')
       .eq('id', documentoId)
       .single()
 
-    if (error) {
-      console.error('Erro ao buscar documento:', error)
+    if (error || !documento) {
       return NextResponse.json(
-        { success: false, error: 'Documento não encontrado' },
+        { error: 'Documento não encontrado' },
         { status: 404 }
       )
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      documento 
+    console.log(`Servindo download do documento: ${documento.nome}`)
+
+    let fileBuffer: Buffer
+
+    // Verificar se é documento migrado (com storage_filename) ou antigo (com cloudinary)
+    if (documento.storage_folder && documento.storage_filename) {
+      // Documento novo - usar API de storage
+      console.log(`Storage Folder: ${documento.storage_folder}, Filename: ${documento.storage_filename}`)
+      fileBuffer = await downloadFile(documento.storage_folder, documento.storage_filename)
+    } else if (documento.cloudinary_public_id) {
+      // Documento antigo - usar Cloudinary (compatibilidade temporária)
+      console.log(`Cloudinary Public ID: ${documento.cloudinary_public_id}`)
+      const { downloadFromCloudinary } = await import('@/lib/cloudinary')
+      fileBuffer = await downloadFromCloudinary(documento.cloudinary_public_id)
+    } else {
+      return NextResponse.json(
+        { error: 'Documento sem referência de storage válida' },
+        { status: 500 }
+      )
+    }
+
+    // Determinar Content-Type baseado na extensão
+    const contentTypeMap: Record<string, string> = {
+      pdf: 'application/pdf',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    }
+
+    const contentType = contentTypeMap[documento.tipo.toLowerCase()] || 'application/octet-stream'
+
+    // Retornar arquivo para download
+    return new NextResponse(fileBuffer, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': fileBuffer.length.toString(),
+        'Content-Disposition': `attachment; filename="${documento.nome_original}"`,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     })
 
   } catch (error) {
-    console.error('Erro ao buscar documento:', error)
+    console.error('Erro no download do documento:', error)
     return NextResponse.json(
       { 
         success: false,
-        error: 'Erro interno do servidor' 
+        error: 'Erro ao processar documento para download' 
       },
       { status: 500 }
     )

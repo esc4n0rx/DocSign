@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/auth'
-import { uploadFileBuffer } from '@/lib/cloudinary'
+import { uploadFileBuffer } from '@/lib/storage-api'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
@@ -93,15 +93,12 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const fileBuffer = Buffer.from(arrayBuffer)
 
-    // Gerar nome único para o arquivo
-    const timestamp = Date.now()
-    const extension = file.name.split('.').pop() || 'bin'
-    const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
-    const folderPath = `colaboradores/${colaborador.matricula}_${colaborador.id}`
+    // Definir pasta do colaborador
+    const folderName = `${colaborador.matricula}_${colaborador.id}`
 
-    // Upload do arquivo diretamente para Cloudinary
-    console.log('Enviando arquivo para Cloudinary...')
-    const uploadResult = await uploadFileBuffer(fileBuffer, fileName, folderPath, file.type)
+    // Upload do arquivo para a API de storage
+    console.log('Enviando arquivo para API de storage...')
+    const uploadResult = await uploadFileBuffer(fileBuffer, file.name, folderName, file.type)
 
     if (!uploadResult.success) {
       return NextResponse.json(
@@ -110,41 +107,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Salvar metadados no banco (sem campos de criptografia)
+    // Salvar metadados no banco (com novos campos de storage)
     console.log('Salvando metadados no banco de dados...')
     const { data: documento, error: dbError } = await serviceSupabase
       .from('documentos')
       .insert({
         colaborador_id: colaboradorId,
-        nome: fileName,
+        nome: uploadResult.fileName!, // Nome do arquivo salvo na API
         nome_original: file.name,
-        tipo: extension,
+        tipo: file.name.split('.').pop() || 'bin',
         tamanho: file.size,
         categoria: categoria,
-        cloudinary_public_id: uploadResult.public_id!,
-        cloudinary_url: uploadResult.secure_url!
+        storage_folder: folderName,
+        storage_filename: uploadResult.fileName!
       })
       .select()
       .single()
 
     if (dbError) {
       console.error('Erro ao salvar no banco:', dbError)
-      // Tentar remover arquivo do Cloudinary em caso de erro no banco
+      // Tentar remover arquivo da API de storage em caso de erro no banco
       try {
-        await fetch(`${process.env.CLOUDINARY_URL}/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/raw/destroy`, {
-          method: 'POST',
+        const response = await fetch(`${process.env.STORAGE_API_URL}/files/${folderName}/${uploadResult.fileName}`, {
+          method: 'DELETE',
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({
-            public_id: uploadResult.public_id!,
-            api_key: process.env.CLOUDINARY_API_KEY!,
-            timestamp: Math.round(Date.now() / 1000).toString(),
-            signature: '' // Precisaria calcular a assinatura
-          })
+            'Authorization': `Bearer ${process.env.STORAGE_API_TOKEN}`,
+          }
         })
+        if (!response.ok) {
+          console.warn('Falha na limpeza do arquivo da API de storage')
+        }
       } catch (cleanupError) {
-        console.error('Erro na limpeza do Cloudinary:', cleanupError)
+        console.error('Erro na limpeza da API de storage:', cleanupError)
       }
 
       return NextResponse.json(
