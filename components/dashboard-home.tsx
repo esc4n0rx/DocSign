@@ -1,6 +1,37 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
+interface DashboardData {
+  totalColaboradores: number;
+  documentosAtivos: number;
+  consultasHoje: number;
+  usuariosAtivos: number;
+}
+
 export function DashboardHome() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const response = await fetch('/api/dashboard');
+        const result = await response.json();
+        if (result.success) {
+          setData(result.data);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar dados do dashboard:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
   return (
     <div className="space-y-6">
       <div>
@@ -14,8 +45,14 @@ export function DashboardHome() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total de Colaboradores</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">1,234</div>
-            <p className="text-xs text-muted-foreground">+12% em relação ao mês anterior</p>
+            {loading ? (
+              <div className="text-2xl font-bold text-foreground">...</div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-foreground">{data?.totalColaboradores}</div>
+                <p className="text-xs text-muted-foreground">+12% em relação ao mês anterior</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -24,8 +61,14 @@ export function DashboardHome() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Documentos Ativos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">5,678</div>
-            <p className="text-xs text-muted-foreground">+8% em relação ao mês anterior</p>
+            {loading ? (
+              <div className="text-2xl font-bold text-foreground">...</div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-foreground">{data?.documentosAtivos}</div>
+                <p className="text-xs text-muted-foreground">+8% em relação ao mês anterior</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -34,8 +77,14 @@ export function DashboardHome() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Consultas Hoje</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">89</div>
-            <p className="text-xs text-muted-foreground">+23% em relação a ontem</p>
+            {loading ? (
+              <div className="text-2xl font-bold text-foreground">...</div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-foreground">{data?.consultasHoje}</div>
+                <p className="text-xs text-muted-foreground">+23% em relação a ontem</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -44,8 +93,14 @@ export function DashboardHome() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Usuários Ativos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">12</div>
-            <p className="text-xs text-muted-foreground">Todos os administradores</p>
+            {loading ? (
+              <div className="text-2xl font-bold text-foreground">...</div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-foreground">{data?.usuariosAtivos}</div>
+                <p className="text-xs text-muted-foreground">Todos os administradores</p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

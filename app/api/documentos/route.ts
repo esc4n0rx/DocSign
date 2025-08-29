@@ -164,3 +164,81 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
+
+export async function PUT(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    
+    // Verificar autenticação
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
+    
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: 'Não autorizado' },
+        { status: 401 }
+      )
+    }
+
+    const serviceSupabase = createServiceClient()
+    
+    // Verificar permissões
+    const { data: currentUserData } = await serviceSupabase
+      .from('usuarios')
+      .select('permissao')
+      .eq('id', currentUser.id)
+      .single()
+
+    if (!currentUserData || !['Admin', 'Editor'].includes(currentUserData.permissao)) {
+      return NextResponse.json(
+        { error: 'Apenas administradores e editores podem editar documentos' },
+        { status: 403 }
+      )
+    }
+
+    const body = await request.json()
+    const { id, nome, tipo_documento, data_validade, status } = body
+
+    if (!id || !nome || !tipo_documento || !status) {
+      return NextResponse.json(
+        { error: 'Campos obrigatórios: id, nome, tipo_documento, status' },
+        { status: 400 }
+      )
+    }
+
+    const { data: updatedDocument, error } = await serviceSupabase
+      .from('documentos')
+      .update({
+        nome,
+        tipo_documento,
+        data_validade,
+        status
+      })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Erro ao atualizar documento:', error)
+      return NextResponse.json(
+        { error: 'Erro ao atualizar documento' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Documento atualizado com sucesso',
+      documento: updatedDocument
+    })
+
+  } catch (error) {
+    console.error('Erro na atualização do documento:', error)
+    return NextResponse.json(
+      { 
+        success: false,
+        error: 'Erro interno do servidor' 
+      },
+      { status: 500 }
+    )
+  }
+}

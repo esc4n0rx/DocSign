@@ -1,6 +1,6 @@
 export interface Documento {
     id: number
-    colaborador_id: number
+    colaborador_id?: number
     nome: string
     nome_original: string
     tipo: string
@@ -8,9 +8,6 @@ export interface Documento {
     categoria?: string
     cloudinary_public_id: string
     cloudinary_url: string
-    encryption_iv: string
-    encryption_tag: string
-    is_encrypted: boolean
     created_at: string
     updated_at: string
     // Dados do colaborador (quando incluídos via join)
