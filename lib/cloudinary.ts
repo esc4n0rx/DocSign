@@ -1,33 +1,32 @@
-import { v2 as cloudinary, ConfigOptions } from 'cloudinary'
+import { v2 as cloudinary } from 'cloudinary'
+import crypto from 'crypto'
 
 // Configuração do Cloudinary
-const cloudinaryConfig: ConfigOptions = {
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+const cloudinaryConfig = {
+  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!,
+  api_key: process.env.CLOUDINARY_API_KEY!,
+  api_secret: process.env.CLOUDINARY_API_SECRET!
 }
 
 cloudinary.config(cloudinaryConfig)
 
 /**
  * Cria uma pasta no Cloudinary para um colaborador
- * @param colaboradorId - ID único do colaborador
- * @param matricula - Matrícula do colaborador para nome da pasta
+ * @param colaboradorId - ID do colaborador
+ * @param matricula - Matrícula do colaborador  
  * @returns Promise com resultado da operação
  */
 export async function createColaboradorFolder(colaboradorId: number, matricula: string) {
   try {
     const folderName = `colaboradores/${matricula}_${colaboradorId}`
     
-    // Criar uma imagem placeholder para garantir que a pasta seja criada
-    // O Cloudinary só cria pastas quando há arquivos dentro
+    // Criar um placeholder na pasta para garantir que ela existe
     const placeholderResult = await cloudinary.uploader.upload(
-      'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8cmVjdCB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSJ0cmFuc3BhcmVudCIvPgo8L3N2Zz4K',
+      'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
       {
         folder: folderName,
         public_id: '.placeholder',
-        resource_type: 'image',
-        tags: ['colaborador', 'placeholder']
+        resource_type: 'image'
       }
     )
 
@@ -36,7 +35,7 @@ export async function createColaboradorFolder(colaboradorId: number, matricula: 
     return {
       success: true,
       folderName,
-      placeholderUrl: placeholderResult.secure_url
+      placeholderId: placeholderResult.public_id
     }
   } catch (error) {
     console.error('Erro ao criar pasta no Cloudinary:', error)
@@ -48,24 +47,29 @@ export async function createColaboradorFolder(colaboradorId: number, matricula: 
 }
 
 /**
- * Gera URL de upload assinada para um colaborador
- * @param colaboradorId - ID do colaborador
- * @param matricula - Matrícula do colaborador
- * @returns URL e parâmetros para upload
+ * Gera assinatura para upload direto do cliente
+ * @param timestamp - Timestamp da requisição
+ * @param folder - Pasta de destino
+ * @returns Assinatura e parâmetros para upload
  */
-export function generateUploadSignature(colaboradorId: number, matricula: string) {
+export async function generateUploadSignature(timestamp: number, folder: string) {
   try {
-    const folderName = `colaboradores/${matricula}_${colaboradorId}`
-    const timestamp = Math.round(new Date().getTime() / 1000)
-    
     const params = {
-      timestamp,
-      folder: folderName,
-      resource_type: 'raw', // Apenas PDFs como raw
-      allowed_formats: 'pdf'
+      timestamp: timestamp,
+      folder: folder,
+      resource_type: 'raw', // PDFs são sempre raw
+      tags: 'documento,pdf'
     }
 
-    const signature = cloudinary.utils.api_sign_request(params, cloudinaryConfig.api_secret!)
+    const paramsToSign = Object.keys(params)
+      .sort()
+      .map(key => `${key}=${params[key as keyof typeof params]}`)
+      .join('&')
+
+    const signature = crypto
+      .createHash('sha256')
+      .update(paramsToSign + cloudinaryConfig.api_secret)
+      .digest('hex')
 
     return {
       success: true,
@@ -140,20 +144,24 @@ export async function downloadFromCloudinary(publicId: string): Promise<Buffer> 
   try {
     console.log(`Baixando PDF com publicId: ${publicId}`)
     
-    // Gerar URL direta para PDF como recurso raw
-    const url = cloudinary.url(publicId, { 
-      resource_type: 'raw',
-      secure: true,
-      type: 'upload'
-    })
+    // Gerar URL assinada para recursos privados
+    const timestamp = Math.round(Date.now() / 1000)
+    const auth_params = `public_id=${publicId}&timestamp=${timestamp}`
+    const signature = crypto
+      .createHash('sha1')
+      .update(auth_params + cloudinaryConfig.api_secret)
+      .digest('hex')
     
-    console.log(`URL PDF gerada: ${url}`)
+    // Construir URL com autenticação
+    const url = `https://res.cloudinary.com/${cloudinaryConfig.cloud_name}/raw/upload/v1/${publicId}?api_key=${cloudinaryConfig.api_key}&signature=${signature}&timestamp=${timestamp}`
+    
+    console.log(`URL PDF assinada gerada: ${url}`)
     
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; PDFViewer/1.0)',
-        'Accept': 'application/pdf'
+        'Accept': 'application/pdf,application/octet-stream,*/*'
       }
     })
     
@@ -162,9 +170,36 @@ export async function downloadFromCloudinary(publicId: string): Promise<Buffer> 
     console.log(`Content-Length: ${response.headers.get('content-length')}`)
     
     if (!response.ok) {
-      throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}. URL: ${url}`)
+      // Tentar método alternativo usando o SDK
+      console.log('Tentando método alternativo com SDK do Cloudinary...')
+      
+      // Gerar URL privada usando o SDK
+      const sdkUrl = cloudinary.url(publicId, {
+        resource_type: 'raw',
+        type: 'authenticated',
+        sign_url: true,
+        secure: true
+      })
+      
+      console.log(`URL SDK gerada: ${sdkUrl}`)
+      
+      const sdkResponse = await fetch(sdkUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; PDFViewer/1.0)',
+          'Accept': 'application/pdf,application/octet-stream,*/*'
+        }
+      })
+      
+      if (!sdkResponse.ok) {
+        throw new Error(`Erro HTTP: ${sdkResponse.status} - ${sdkResponse.statusText}. URL: ${sdkUrl}`)
+      }
+      
+      const arrayBuffer = await sdkResponse.arrayBuffer()
+      console.log(`Download PDF bem-sucedido (SDK) - Tamanho: ${arrayBuffer.byteLength} bytes`)
+      return Buffer.from(arrayBuffer)
     }
-
+    
     const arrayBuffer = await response.arrayBuffer()
     console.log(`Download PDF bem-sucedido - Tamanho: ${arrayBuffer.byteLength} bytes`)
     return Buffer.from(arrayBuffer)
