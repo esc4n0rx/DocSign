@@ -18,7 +18,7 @@ export function useDocuments(colaboradorId?: number) {
 
     setIsLoading(true)
     try {
-      const url = `/api/documentos?colaborador_id=${colaboradorId}`
+      const url = `/api/documentos?colaboradorId=${colaboradorId}`
       
       const response = await fetch(url)
       const data: DocumentoListResponse = await response.json()

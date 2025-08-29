@@ -46,24 +46,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     console.log(`Servindo download do documento: ${documento.nome}`)
 
-    let fileBuffer: Buffer
-
-    // Verificar se é documento migrado (com storage_filename) ou antigo (com cloudinary)
-    if (documento.storage_folder && documento.storage_filename) {
-      // Documento novo - usar API de storage
-      console.log(`Storage Folder: ${documento.storage_folder}, Filename: ${documento.storage_filename}`)
-      fileBuffer = await downloadFile(documento.storage_folder, documento.storage_filename)
-    } else if (documento.cloudinary_public_id) {
-      // Documento antigo - usar Cloudinary (compatibilidade temporária)
-      console.log(`Cloudinary Public ID: ${documento.cloudinary_public_id}`)
-      const { downloadFromCloudinary } = await import('@/lib/cloudinary')
-      fileBuffer = await downloadFromCloudinary(documento.cloudinary_public_id)
-    } else {
+    // Verificar se o documento tem referência de storage válida
+    if (!documento.storage_folder || !documento.storage_filename) {
       return NextResponse.json(
         { error: 'Documento sem referência de storage válida' },
-        { status: 500 }
+        { status: 404 }
       )
     }
+
+    console.log(`Storage Folder: ${documento.storage_folder}, Filename: ${documento.storage_filename}`)
+
+    // Baixar arquivo da API de storage
+    const fileBuffer = await downloadFile(documento.storage_folder, documento.storage_filename)
 
     // Determinar Content-Type baseado na extensão
     const contentTypeMap: Record<string, string> = {

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/auth'
-import { downloadFile } from '@/lib/storage-api'
+import { deleteFile } from '@/lib/storage-api'
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// GET - Listar documentos de um colaborador
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     
-    // Verificar autenticação
+    // Verificar se o usuário atual tem permissão
     const { data: { user: currentUser } } = await supabase.auth.getUser()
     
     if (!currentUser) {
@@ -17,24 +18,102 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
-    // Aguardar params antes de usar suas propriedades
-    const resolvedParams = await params
-    const documentoId = parseInt(resolvedParams.id)
+    const { searchParams } = new URL(request.url)
+    const colaboradorId = searchParams.get('colaboradorId')
 
-    if (isNaN(documentoId)) {
+    if (!colaboradorId) {
       return NextResponse.json(
-        { error: 'ID do documento inválido' },
+        { error: 'ID do colaborador é obrigatório' },
         { status: 400 }
       )
     }
 
     const serviceSupabase = createServiceClient()
 
-    // Buscar documento
+    // Buscar documentos do colaborador
+    const { data: documentos, error } = await serviceSupabase
+      .from('documentos')
+      .select(`
+        *,
+        colaborador:colaboradores (
+          id,
+          nome,
+          matricula,
+          email
+        )
+      `)
+      .eq('colaborador_id', parseInt(colaboradorId))
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Erro ao buscar documentos:', error)
+      return NextResponse.json(
+        { error: 'Erro ao buscar documentos' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      documentos
+    })
+
+  } catch (error) {
+    console.error('Erro na listagem de documentos:', error)
+    return NextResponse.json(
+      { 
+        success: false,
+        error: 'Erro interno do servidor' 
+      },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE - Remover um documento
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    
+    // Verificar se o usuário atual tem permissão
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
+    
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: 'Não autorizado' },
+        { status: 401 }
+      )
+    }
+
+    const serviceSupabase = createServiceClient()
+    const { data: currentUserData } = await serviceSupabase
+      .from('usuarios')
+      .select('permissao')
+      .eq('id', currentUser.id)
+      .single()
+
+    if (!currentUserData || !['Admin', 'Editor'].includes(currentUserData.permissao)) {
+      return NextResponse.json(
+        { error: 'Apenas administradores e editores podem remover documentos' },
+        { status: 403 }
+      )
+    }
+
+    const { searchParams } = new URL(request.url)
+    const documentoId = searchParams.get('id')
+
+    if (!documentoId) {
+      return NextResponse.json(
+        { error: 'ID do documento é obrigatório' },
+        { status: 400 }
+      )
+    }
+
+    // Buscar documento para obter informações do storage
     const { data: documento, error } = await serviceSupabase
       .from('documentos')
       .select('*')
-      .eq('id', documentoId)
+      .eq('id', parseInt(documentoId))
       .single()
 
     if (error || !documento) {
@@ -44,57 +123,45 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
-    console.log(`Servindo download do documento: ${documento.nome}`)
+    console.log(`Removendo documento: ${documento.nome}`)
 
-    let fileBuffer: Buffer
-
-    // Verificar se é documento migrado (com storage_filename) ou antigo (com cloudinary)
+    // Remover arquivo da API de storage (se existir)
     if (documento.storage_folder && documento.storage_filename) {
-      // Documento novo - usar API de storage
-      console.log(`Storage Folder: ${documento.storage_folder}, Filename: ${documento.storage_filename}`)
-      fileBuffer = await downloadFile(documento.storage_folder, documento.storage_filename)
-    } else if (documento.cloudinary_public_id) {
-      // Documento antigo - usar Cloudinary (compatibilidade temporária)
-      console.log(`Cloudinary Public ID: ${documento.cloudinary_public_id}`)
-      const { downloadFromCloudinary } = await import('@/lib/cloudinary')
-      fileBuffer = await downloadFromCloudinary(documento.cloudinary_public_id)
-    } else {
+      console.log(`Removendo arquivo: ${documento.storage_filename} da pasta: ${documento.storage_folder}`)
+      const deleteResult = await deleteFile(documento.storage_folder, documento.storage_filename)
+      
+      if (!deleteResult.success) {
+        console.warn(`Aviso: falha ao remover arquivo da storage: ${deleteResult.error}`)
+      }
+    }
+
+    // Remover registro do banco de dados
+    const { error: dbError } = await serviceSupabase
+      .from('documentos')
+      .delete()
+      .eq('id', parseInt(documentoId))
+
+    if (dbError) {
+      console.error('Erro ao remover documento do banco:', dbError)
       return NextResponse.json(
-        { error: 'Documento sem referência de storage válida' },
+        { error: 'Erro ao remover documento do banco de dados' },
         { status: 500 }
       )
     }
 
-    // Determinar Content-Type baseado na extensão
-    const contentTypeMap: Record<string, string> = {
-      pdf: 'application/pdf',
-      jpg: 'image/jpeg',
-      jpeg: 'image/jpeg',
-      png: 'image/png',
-      doc: 'application/msword',
-      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    }
+    console.log(`Documento removido com sucesso: ${documento.nome}`)
 
-    const contentType = contentTypeMap[documento.tipo.toLowerCase()] || 'application/octet-stream'
-
-    // Retornar arquivo para download
-    return new NextResponse(fileBuffer, {
-      headers: {
-        'Content-Type': contentType,
-        'Content-Length': fileBuffer.length.toString(),
-        'Content-Disposition': `attachment; filename="${documento.nome_original}"`,
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
+    return NextResponse.json({
+      success: true,
+      message: 'Documento removido com sucesso'
     })
 
   } catch (error) {
-    console.error('Erro no download do documento:', error)
+    console.error('Erro na remoção do documento:', error)
     return NextResponse.json(
       { 
         success: false,
-        error: 'Erro ao processar documento para download' 
+        error: 'Erro interno do servidor' 
       },
       { status: 500 }
     )

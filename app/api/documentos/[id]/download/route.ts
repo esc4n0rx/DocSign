@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/auth'
-import { downloadFromCloudinary } from '@/lib/cloudinary'
+import { downloadFile } from '@/lib/storage-api'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -45,10 +45,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     console.log(`Servindo download do documento: ${documento.nome}`)
-    console.log(`Cloudinary Public ID: ${documento.cloudinary_public_id}`)
 
-    // Baixar arquivo diretamente do Cloudinary
-    const fileBuffer = await downloadFromCloudinary(documento.cloudinary_public_id)
+    // Verificar se o documento tem referência de storage válida
+    if (!documento.storage_folder || !documento.storage_filename) {
+      return NextResponse.json(
+        { error: 'Documento sem referência de storage válida' },
+        { status: 404 }
+      )
+    }
+
+    console.log(`Storage Folder: ${documento.storage_folder}, Filename: ${documento.storage_filename}`)
+
+    // Baixar arquivo da API de storage
+    const fileBuffer = await downloadFile(documento.storage_folder, documento.storage_filename)
 
     // Determinar Content-Type baseado na extensão
     const contentTypeMap: Record<string, string> = {
