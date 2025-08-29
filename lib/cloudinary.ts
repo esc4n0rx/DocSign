@@ -175,26 +175,28 @@ export function generateUploadSignature(colaboradorId: number, matricula: string
 }
 
 /**
- * Faz upload de um buffer criptografado para o Cloudinary
- * @param encryptedBuffer - Buffer criptografado
+ * Faz upload de um buffer de arquivo para o Cloudinary
+ * @param fileBuffer - Buffer do arquivo
  * @param fileName - Nome do arquivo
  * @param folderPath - Caminho da pasta
+ * @param mimeType - Tipo MIME do arquivo
  * @returns Resultado do upload
  */
-export async function uploadEncryptedBuffer(
-  encryptedBuffer: Buffer,
+export async function uploadFileBuffer(
+  fileBuffer: Buffer,
   fileName: string,
-  folderPath: string
+  folderPath: string,
+  mimeType: string
 ) {
   try {
-    // Converter buffer para base64
-    const base64Data = `data:application/octet-stream;base64,${encryptedBuffer.toString('base64')}`
+    // Converter buffer para base64 com o tipo MIME correto
+    const base64Data = `data:${mimeType};base64,${fileBuffer.toString('base64')}`
     
     const uploadResult = await cloudinary.uploader.upload(base64Data, {
       folder: folderPath,
       public_id: fileName,
-      resource_type: 'raw', // Para arquivos binários
-      tags: ['documento', 'criptografado']
+      resource_type: 'auto', // Detectar automaticamente o tipo de recurso
+      tags: ['documento']
     })
 
     return {
@@ -219,7 +221,7 @@ export async function uploadEncryptedBuffer(
  */
 export async function downloadFromCloudinary(publicId: string): Promise<Buffer> {
   try {
-    const response = await fetch(cloudinary.url(publicId, { resource_type: 'raw' }))
+    const response = await fetch(cloudinary.url(publicId, { resource_type: 'auto' }))
     
     if (!response.ok) {
       throw new Error(`Erro HTTP: ${response.status}`)
@@ -241,7 +243,7 @@ export async function downloadFromCloudinary(publicId: string): Promise<Buffer> 
 export async function deleteFromCloudinary(publicId: string) {
   try {
     const result = await cloudinary.uploader.destroy(publicId, {
-      resource_type: 'raw'
+      resource_type: 'auto'
     })
 
     return {

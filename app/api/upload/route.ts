@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/auth'
-import { encryptBuffer } from '@/lib/encryption'
-import { uploadEncryptedBuffer } from '@/lib/cloudinary'
+import { uploadFileBuffer } from '@/lib/cloudinary'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
@@ -94,19 +93,15 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const fileBuffer = Buffer.from(arrayBuffer)
 
-    // Criptografar o arquivo
-    console.log('Criptografando arquivo...')
-    const { encryptedData, iv, tag } = encryptBuffer(fileBuffer)
-
     // Gerar nome único para o arquivo
     const timestamp = Date.now()
     const extension = file.name.split('.').pop() || 'bin'
     const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
     const folderPath = `colaboradores/${colaborador.matricula}_${colaborador.id}`
 
-    // Upload do arquivo criptografado para Cloudinary
-    console.log('Enviando arquivo criptografado para Cloudinary...')
-    const uploadResult = await uploadEncryptedBuffer(encryptedData, fileName, folderPath)
+    // Upload do arquivo diretamente para Cloudinary
+    console.log('Enviando arquivo para Cloudinary...')
+    const uploadResult = await uploadFileBuffer(fileBuffer, fileName, folderPath, file.type)
 
     if (!uploadResult.success) {
       return NextResponse.json(
@@ -115,7 +110,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Salvar metadados no banco
+    // Salvar metadados no banco (sem campos de criptografia)
     console.log('Salvando metadados no banco de dados...')
     const { data: documento, error: dbError } = await serviceSupabase
       .from('documentos')
@@ -127,10 +122,7 @@ export async function POST(request: NextRequest) {
         tamanho: file.size,
         categoria: categoria,
         cloudinary_public_id: uploadResult.public_id!,
-        cloudinary_url: uploadResult.secure_url!,
-        encryption_iv: iv,
-        encryption_tag: tag,
-        is_encrypted: true
+        cloudinary_url: uploadResult.secure_url!
       })
       .select()
       .single()
