@@ -156,26 +156,20 @@ export async function GET(request: NextRequest) {
     }
 
     const serviceSupabase = createServiceClient()
-    
-    // Verificar se o usuário tem permissão para visualizar
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao, status')
-      .eq('id', currentUser.id)
-      .single()
+    const { searchParams } = new URL(request.url)
+    const search = searchParams.get('search')
 
-    if (!currentUserData || currentUserData.status !== 'Ativo') {
-      return NextResponse.json(
-        { error: 'Usuário inativo ou sem permissão' },
-        { status: 403 }
-      )
-    }
-
-    // Buscar todos os colaboradores
-    const { data: colaboradores, error } = await serviceSupabase
+    let query = serviceSupabase
       .from('colaboradores')
       .select('*')
-      .order('created_at', { ascending: false })
+      .order('nome', { ascending: true })
+
+    // Se há termo de busca, filtrar por nome ou matrícula
+    if (search) {
+      query = query.or(`nome.ilike.%${search}%,matricula.ilike.%${search}%`)
+    }
+
+    const { data: colaboradores, error } = await query
 
     if (error) {
       console.error('Erro ao buscar colaboradores:', error)
@@ -191,7 +185,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Erro ao listar colaboradores:', error)
+    console.error('Erro na listagem de colaboradores:', error)
     return NextResponse.json(
       { 
         success: false,

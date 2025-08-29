@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,701 +19,387 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { Colaborador, ColaboradorFormData } from "@/types/colaborador"
+import DocumentUpload from "@/components/DocumentUpload"
+import DocumentList from "@/components/DocumentList"
+import {
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  User,
+  Mail,
+  Phone,
+  Calendar,
+  Building,
+  Briefcase,
+  FileText,
+  Upload
+} from "lucide-react"
 
+// --- CONSTANTS ---
 const departamentos = [
-  "TI",
-  "Recursos Humanos", 
-  "Comercial",
-  "Design",
-  "Financeiro",
-  "Marketing",
-  "Operações",
-  "Administrativo"
+  "TI", "Recursos Humanos", "Comercial", "Design",
+  "Financeiro", "Marketing", "Operações", "Administrativo"
 ]
 
 const statusOptions: Array<Colaborador['status']> = [
-  "Ativo",
-  "Inativo",
-  "Férias", 
-  "Licença Médica"
+  "Ativo", "Inativo", "Férias", "Licença Médica"
 ]
 
 const initialFormData: ColaboradorFormData = {
-  nome: "",
-  matricula: "",
-  cargo: "",
-  departamento: "",
-  status: "Ativo",
-  email: "",
-  telefone: "",
-  data_admissao: "",
+  nome: "", matricula: "", cargo: "", departamento: "",
+  status: "Ativo", email: "", telefone: "", data_admissao: "",
 }
+
+// --- SUB-COMPONENTS (within the same file) ---
 
 interface ColaboradorFormProps {
   formData: ColaboradorFormData
   setFormData: React.Dispatch<React.SetStateAction<ColaboradorFormData>>
-  onSubmit: () => void
+  onSubmit: (e: React.FormEvent) => void
   onCancel: () => void
   isSubmitting: boolean
   submitText: string
-  isEdit?: boolean
 }
 
 const ColaboradorFormComponent = ({
-  formData,
-  setFormData,
-  onSubmit,
-  onCancel,
-  isSubmitting,
-  submitText,
-  isEdit,
+  formData, setFormData, onSubmit, onCancel, isSubmitting, submitText,
 }: ColaboradorFormProps) => (
-  <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="space-y-4">
-    <div className="grid grid-cols-2 gap-4">
+  <form onSubmit={onSubmit} className="space-y-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2">
         <Label htmlFor="nome">Nome Completo</Label>
-        <Input
-          id="nome"
-          value={formData.nome}
-          onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-          placeholder="Digite o nome completo"
-          disabled={isSubmitting}
-          required
-        />
+        <Input id="nome" value={formData.nome} onChange={(e) => setFormData({ ...formData, nome: e.target.value })} placeholder="Digite o nome completo" disabled={isSubmitting} required />
       </div>
       <div className="space-y-2">
         <Label htmlFor="matricula">Matrícula</Label>
-        <Input
-          id="matricula"
-          value={formData.matricula}
-          onChange={(e) => setFormData({ ...formData, matricula: e.target.value.toUpperCase() })}
-          placeholder="Digite a matrícula"
-          disabled={isSubmitting}
-          required
-        />
+        <Input id="matricula" value={formData.matricula} onChange={(e) => setFormData({ ...formData, matricula: e.target.value.toUpperCase() })} placeholder="Digite a matrícula" disabled={isSubmitting} required />
       </div>
     </div>
-
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2">
         <Label htmlFor="cargo">Cargo</Label>
-        <Input
-          id="cargo"
-          value={formData.cargo}
-          onChange={(e) => setFormData({ ...formData, cargo: e.target.value })}
-          placeholder="Digite o cargo"
-          disabled={isSubmitting}
-          required
-        />
+        <Input id="cargo" value={formData.cargo} onChange={(e) => setFormData({ ...formData, cargo: e.target.value })} placeholder="Digite o cargo" disabled={isSubmitting} required />
       </div>
       <div className="space-y-2">
         <Label htmlFor="departamento">Departamento</Label>
-        <Select
-          value={formData.departamento}
-          onValueChange={(value) => setFormData({ ...formData, departamento: value })}
-          disabled={isSubmitting}
-          required
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Selecione o departamento" />
-          </SelectTrigger>
-          <SelectContent>
-            {departamentos.map((dept) => (
-              <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-            ))}
-          </SelectContent>
+        <Select value={formData.departamento} onValueChange={(value) => setFormData({ ...formData, departamento: value })} disabled={isSubmitting} required>
+          <SelectTrigger><SelectValue placeholder="Selecione o departamento" /></SelectTrigger>
+          <SelectContent>{departamentos.map(dept => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}</SelectContent>
         </Select>
       </div>
     </div>
-
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2">
-      <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          value={formData.email}
-          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-          placeholder="Digite o email"
-          disabled={isSubmitting}
-          required
-        />
+        <Label htmlFor="email">Email</Label>
+        <Input id="email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="Digite o email" disabled={isSubmitting} required />
       </div>
       <div className="space-y-2">
         <Label htmlFor="telefone">Telefone</Label>
-        <Input
-          id="telefone"
-          value={formData.telefone || ""}
-          onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
-          placeholder="(11) 99999-9999"
-          disabled={isSubmitting}
-        />
+        <Input id="telefone" value={formData.telefone || ""} onChange={(e) => setFormData({ ...formData, telefone: e.target.value })} placeholder="Digite o telefone" disabled={isSubmitting} />
       </div>
     </div>
-
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2">
-        <Label htmlFor="dataAdmissao">Data de Admissão</Label>
-        <Input
-          id="dataAdmissao"
-          type="date"
-          value={formData.data_admissao}
-          onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })}
-          disabled={isSubmitting}
-          required
-        />
+        <Label htmlFor="data_admissao">Data de Admissão</Label>
+        <Input id="data_admissao" type="date" value={formData.data_admissao} onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })} disabled={isSubmitting} required />
       </div>
       <div className="space-y-2">
         <Label htmlFor="status">Status</Label>
-        <Select 
-          value={formData.status} 
-          onValueChange={(value: Colaborador['status']) => setFormData({ ...formData, status: value })}
-          disabled={isSubmitting}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {statusOptions.map((status) => (
-              <SelectItem key={status} value={status}>{status}</SelectItem>
-            ))}
-          </SelectContent>
+        <Select value={formData.status} onValueChange={(value: Colaborador['status']) => setFormData({ ...formData, status: value })} disabled={isSubmitting}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>{statusOptions.map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent>
         </Select>
       </div>
     </div>
-
-    <div className="flex justify-end gap-2 pt-4">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={onCancel}
-        disabled={isSubmitting}
-      >
-        Cancelar
-      </Button>
-      <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Salvando..." : submitText}
-      </Button>
+    <div className="flex justify-end space-x-2 pt-4">
+      <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>Cancelar</Button>
+      <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Salvando..." : submitText}</Button>
     </div>
   </form>
 )
 
-export function ColaboradoresSection() {
+// --- MAIN COMPONENT ---
+
+export default function ColaboradoresSection() {
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [editingColaborador, setEditingColaborador] = useState<Colaborador | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const { toast } = useToast()
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [departamentoFilter, setDepartamentoFilter] = useState<string>("all")
+  
+  const [modalState, setModalState] = useState<{
+    type: 'create' | 'edit' | 'docs' | null
+    data?: Colaborador
+  }>({ type: null })
 
   const [formData, setFormData] = useState<ColaboradorFormData>(initialFormData)
+  const [activeTab, setActiveTab] = useState('list');
+  
+  const { toast } = useToast()
 
-  const filteredColaboradores = colaboradores.filter(
-    (colaborador) =>
-      colaborador.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      colaborador.matricula.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      colaborador.cargo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      colaborador.departamento.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      colaborador.email.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
-
-  const loadColaboradores = async () => {
+  const fetchColaboradores = async () => {
     setIsLoading(true)
     try {
       const response = await fetch('/api/colaboradores')
       const data = await response.json()
-      
       if (data.success) {
         setColaboradores(data.colaboradores)
       } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao carregar colaboradores",
-          variant: "destructive",
-        })
+        toast({ title: "Erro", description: data.error || "Falha ao carregar colaboradores", variant: "destructive" })
       }
     } catch (error) {
-      console.error('Erro ao carregar colaboradores:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao carregar colaboradores",
-        variant: "destructive",
-      })
+      toast({ title: "Erro de Conexão", description: "Não foi possível conectar ao servidor.", variant: "destructive" })
     } finally {
       setIsLoading(false)
     }
   }
 
   useEffect(() => {
-    loadColaboradores()
+    fetchColaboradores()
   }, [])
 
-  const resetForm = () => {
-    setFormData(initialFormData)
+  const filteredColaboradores = useMemo(() =>
+    colaboradores.filter(colaborador => {
+      const search = searchTerm.toLowerCase()
+      const matchesSearch = colaborador.nome.toLowerCase().includes(search) ||
+        colaborador.matricula.toLowerCase().includes(search) ||
+        colaborador.email.toLowerCase().includes(search)
+      
+      const matchesStatus = statusFilter === "all" || colaborador.status === statusFilter
+      const matchesDepartamento = departamentoFilter === "all" || colaborador.departamento === departamentoFilter
+      
+      return matchesSearch && matchesStatus && matchesDepartamento
+    }), [colaboradores, searchTerm, statusFilter, departamentoFilter])
+
+  const handleOpenModal = (type: 'create' | 'edit' | 'docs', data?: Colaborador) => {
+    if (type === 'create') {
+      setFormData(initialFormData);
+    } else if (type === 'edit' && data) {
+      setFormData({
+        nome: data.nome, matricula: data.matricula, cargo: data.cargo,
+        departamento: data.departamento, status: data.status, email: data.email,
+        telefone: data.telefone || "", data_admissao: data.data_admissao,
+      });
+    } else if (type === 'docs') {
+      setActiveTab('list'); // Reset tab on open
+    }
+    setModalState({ type, data });
+  }
+  
+  const handleCloseModal = () => {
+    setModalState({ type: null });
+    setFormData(initialFormData); // Reset form data on any modal close
   }
 
-  const validateForm = () => {
-    if (!formData.nome.trim()) {
-      toast({
-        title: "Erro",
-        description: "Nome é obrigatório",
-        variant: "destructive",
-      })
-      return false
-    }
-    
-    if (!formData.matricula.trim()) {
-      toast({
-        title: "Erro",
-        description: "Matrícula é obrigatória",
-        variant: "destructive",
-      })
-      return false
-    }
-    
-    if (!formData.email.trim()) {
-      toast({
-        title: "Erro",
-        description: "Email é obrigatório",
-        variant: "destructive",
-      })
-      return false
-    }
-    
-    if (!formData.cargo.trim()) {
-      toast({
-        title: "Erro",
-        description: "Cargo é obrigatório",
-        variant: "destructive",
-      })
-      return false
-    }
-    
-    if (!formData.departamento) {
-      toast({
-        title: "Erro",
-        description: "Departamento é obrigatório",
-        variant: "destructive",
-      })
-      return false
-    }
-    
-    if (!formData.data_admissao) {
-      toast({
-        title: "Erro",
-        description: "Data de admissão é obrigatória",
-        variant: "destructive",
-      })
-      return false
-    }
-
-    return true
-  }
-
-  const handleAddColaborador = async () => {
-    if (!validateForm()) return
-
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     setIsSubmitting(true)
+    
+    const isEditing = modalState.type === 'edit'
+    const url = '/api/colaboradores'
+    const method = isEditing ? 'PUT' : 'POST'
+    const body = isEditing ? JSON.stringify({ id: modalState.data?.id, ...formData }) : JSON.stringify(formData)
+    
     try {
-      const response = await fetch('/api/colaboradores', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body,
       })
-
       const data = await response.json()
 
       if (data.success) {
-        toast({
-          title: "Sucesso",
-          description: `Colaborador criado com sucesso${data.cloudinaryResult?.success ? ' e pasta no Cloudinary criada' : ''}`,
-        })
-        resetForm()
-        setIsAddDialogOpen(false)
-        loadColaboradores()
+        toast({ title: "Sucesso", description: `Colaborador ${isEditing ? 'atualizado' : 'criado'} com sucesso!` })
+        handleCloseModal()
+        fetchColaboradores()
       } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao criar colaborador",
-          variant: "destructive",
-        })
+        toast({ title: "Erro", description: data.error, variant: "destructive" })
       }
     } catch (error) {
-      console.error('Erro ao criar colaborador:', error)
-      toast({
-        title: "Erro",
-        description: "Erro interno do servidor",
-        variant: "destructive",
-      })
+      toast({ title: "Erro Interno", description: "Tente novamente.", variant: "destructive" })
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const handleEditColaborador = (colaborador: Colaborador) => {
-    setEditingColaborador(colaborador)
-    setFormData({
-      nome: colaborador.nome,
-      matricula: colaborador.matricula,
-      cargo: colaborador.cargo,
-      departamento: colaborador.departamento,
-      status: colaborador.status,
-      email: colaborador.email,
-      telefone: colaborador.telefone || "",
-      data_admissao: colaborador.data_admissao,
-    })
-    setIsEditDialogOpen(true)
-  }
-
-  const handleUpdateColaborador = async () => {
-    if (!editingColaborador || !validateForm()) return
-
-    setIsSubmitting(true)
+  const handleDelete = async (colaborador: Colaborador) => {
     try {
-      const response = await fetch('/api/colaboradores', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...formData,
-          id: editingColaborador.id,
-        }),
-      })
-
+      const response = await fetch(`/api/colaboradores/${colaborador.id}`, { method: 'DELETE' })
       const data = await response.json()
 
       if (data.success) {
-        toast({
-          title: "Sucesso",
-          description: "Colaborador atualizado com sucesso",
-        })
-        setIsEditDialogOpen(false)
-        setEditingColaborador(null)
-        resetForm()
-        loadColaboradores()
+        toast({ title: "Sucesso", description: "Colaborador removido com sucesso!" })
+        fetchColaboradores()
       } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao atualizar colaborador",
-          variant: "destructive",
-        })
+        toast({ title: "Erro", description: data.error, variant: "destructive" })
       }
     } catch (error) {
-      console.error('Erro ao atualizar colaborador:', error)
-      toast({
-        title: "Erro",
-        description: "Erro interno do servidor",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
+      toast({ title: "Erro Interno", description: "Tente novamente.", variant: "destructive" })
     }
   }
 
-  const handleRemoveColaborador = async (colaborador: Colaborador) => {
-    try {
-      const response = await fetch(`/api/colaboradores/${colaborador.id}`, {
-        method: 'DELETE',
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        toast({
-          title: "Sucesso",
-          description: "Colaborador removido com sucesso",
-        })
-        loadColaboradores()
-      } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao remover colaborador",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error('Erro ao remover colaborador:', error)
-      toast({
-        title: "Erro",
-        description: "Erro interno do servidor",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const handleViewDocuments = (colaborador: Colaborador) => {
-    // TODO: Navegar para seção de consultas com colaborador selecionado
-    console.log(`Visualizar documentos de: ${colaborador.nome}`)
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString + 'T00:00:00').toLocaleDateString('pt-BR')
-  }
-
-  const getStatusVariant = (status: Colaborador['status']) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Ativo':
-        return 'default' as const
-      case 'Férias':
-        return 'secondary' as const
-      case 'Licença Médica':
-        return 'outline' as const
-      case 'Inativo':
-        return 'destructive' as const
-      default:
-        return 'outline' as const
-    }
-  }
-
-  const handleCloseAddDialog = (open: boolean) => {
-    setIsAddDialogOpen(open)
-    if (!open) {
-      resetForm()
-    }
-  }
-
-  const handleCloseEditDialog = (open: boolean) => {
-    setIsEditDialogOpen(open)
-    if (!open) {
-      setEditingColaborador(null)
-      resetForm()
+      case 'Ativo': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+      case 'Inativo': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+      case 'Férias': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
+      case 'Licença Médica': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
     }
   }
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-semibold text-foreground text-balance">Colaboradores</h1>
-          <p className="text-muted-foreground mt-2 text-pretty">Gerencie todos os colaboradores do sistema</p>
-        </div>
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground text-balance">Colaboradores</h1>
-          <p className="text-muted-foreground mt-2 text-pretty">Gerencie todos os colaboradores do sistema</p>
+          <h2 className="text-2xl font-semibold text-foreground">Colaboradores</h2>
+          <p className="text-muted-foreground">Gerencie colaboradores e seus documentos</p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={handleCloseAddDialog}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Adicionar Colaborador
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Adicionar Novo Colaborador</DialogTitle>
-            </DialogHeader>
-            <ColaboradorFormComponent
-              formData={formData}
-              setFormData={setFormData}
-              onSubmit={handleAddColaborador}
-              onCancel={() => handleCloseAddDialog(false)}
-              isSubmitting={isSubmitting}
-              submitText="Adicionar Colaborador"
-            />
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => handleOpenModal('create')}>
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Colaborador
+        </Button>
       </div>
 
-      {/* Filtros e Busca */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex gap-4">
-            <Input
-              placeholder="Buscar por nome, matrícula, cargo, departamento ou email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1"
-            />
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>{filteredColaboradores.length} colaborador(es)</span>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Buscar por nome, matrícula ou email..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8" />
             </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Filtrar por status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Status</SelectItem>
+                {statusOptions.map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={departamentoFilter} onValueChange={setDepartamentoFilter}>
+              <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Filtrar por departamento" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Departamentos</SelectItem>
+                {departamentos.map(dept => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
 
-      {/* Lista de Colaboradores */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-foreground">Lista de Colaboradores</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {filteredColaboradores.map((colaborador) => (
-              <div
-                key={colaborador.id}
-                className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-accent/50 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 bg-muted rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium text-muted-foreground">
-                      {colaborador.nome
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")
-                        .slice(0, 2)}
-                    </span>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-1">
-                      <h3 className="font-medium text-foreground">{colaborador.nome}</h3>
-                      <Badge variant={getStatusVariant(colaborador.status)}>
-                        {colaborador.status}
-                      </Badge>
-                      {colaborador.cloudinary_folder && (
-                        <Badge variant="outline" className="text-xs">
-                          <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m8 10l4 4 4-4" />
-                          </svg>
-                          Pasta Criada
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                      <span>Matrícula: {colaborador.matricula}</span>
-                      <span className="hidden md:inline">•</span>
-                      <span>{colaborador.cargo}</span>
-                      <span className="hidden md:inline">•</span>
-                      <span>{colaborador.departamento}</span>
-                      <span className="hidden md:inline">•</span>
-                      <span>{colaborador.email}</span>
-                      <span className="hidden md:inline">•</span>
-                      <span>Admissão: {formatDate(colaborador.data_admissao)}</span>
+      {filteredColaboradores.length === 0 ? (
+        <Card>
+          <CardContent className="text-center py-12">
+            <User className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">
+              {colaboradores.length === 0 ? 'Nenhum colaborador cadastrado' : 'Nenhum resultado encontrado'}
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              {colaboradores.length === 0 ? 'Comece criando seu primeiro colaborador' : 'Tente ajustar os filtros de busca'}
+            </p>
+            {colaboradores.length === 0 && (
+              <Button onClick={() => handleOpenModal('create')}>
+                <Plus className="h-4 w-4 mr-2" />
+                Criar Primeiro Colaborador
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredColaboradores.map((colaborador) => (
+            <Card key={colaborador.id} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center"><User className="h-5 w-5 text-primary" /></div>
+                    <div>
+                      <CardTitle className="text-lg">{colaborador.nome}</CardTitle>
+                      <p className="text-sm text-muted-foreground">{colaborador.matricula}</p>
                     </div>
                   </div>
+                  <Badge className={getStatusColor(colaborador.status)}>{colaborador.status}</Badge>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleViewDocuments(colaborador)}
-                    className="gap-2"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
-                    Documentos
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleEditColaborador(colaborador)}
-                    className="gap-2"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                      />
-                    </svg>
-                    Editar
-                  </Button>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 gap-2 text-sm">
+                  <div className="flex items-center gap-2 text-muted-foreground"><Briefcase className="h-4 w-4" /><span>{colaborador.cargo}</span></div>
+                  <div className="flex items-center gap-2 text-muted-foreground"><Building className="h-4 w-4" /><span>{colaborador.departamento}</span></div>
+                  <div className="flex items-center gap-2 text-muted-foreground"><Mail className="h-4 w-4" /><span className="truncate">{colaborador.email}</span></div>
+                  {colaborador.telefone && <div className="flex items-center gap-2 text-muted-foreground"><Phone className="h-4 w-4" /><span>{colaborador.telefone}</span></div>}
+                  <div className="flex items-center gap-2 text-muted-foreground"><Calendar className="h-4 w-4" /><span>{new Date(colaborador.data_admissao).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</span></div>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => handleOpenModal('docs', colaborador)} className="flex-1"><FileText className="h-4 w-4 mr-2" />Documentos</Button>
+                  <Button variant="outline" size="sm" onClick={() => handleOpenModal('edit', colaborador)}><Edit className="h-4 w-4" /></Button>
                   <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="destructive" size="sm" className="gap-2">
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                          />
-                        </svg>
-                        Remover
-                      </Button>
-                    </AlertDialogTrigger>
+                    <AlertDialogTrigger asChild><Button variant="outline" size="sm" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Tem certeza que deseja remover o colaborador "{colaborador.nome}"? Esta ação não pode ser
-                          desfeita e todos os documentos associados no Banco de Dados também serão removidos.
-                        </AlertDialogDescription>
+                        <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                        <AlertDialogDescription>Tem certeza que deseja excluir "{colaborador.nome}"? Esta ação não pode ser desfeita.</AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleRemoveColaborador(colaborador)}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Remover
-                        </AlertDialogAction>
+                        <AlertDialogAction onClick={() => handleDelete(colaborador)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
                 </div>
-              </div>
-            ))}
-          </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-          {filteredColaboradores.length === 0 && !isLoading && (
-            <div className="text-center py-12">
-              <svg
-                className="h-12 w-12 mx-auto mb-4 text-muted-foreground"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                />
-              </svg>
-              <h3 className="text-lg font-medium text-foreground mb-2">Nenhum colaborador encontrado</h3>
-              <p className="text-muted-foreground">
-                {searchTerm
-                  ? `Não encontramos colaboradores com o termo "${searchTerm}"`
-                  : "Adicione o primeiro colaborador ao sistema"}
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Dialog de Edição */}
-      <Dialog open={isEditDialogOpen} onOpenChange={handleCloseEditDialog}>
+      {/* --- MODALS --- */}
+      <Dialog open={modalState.type === 'create' || modalState.type === 'edit'} onOpenChange={(isOpen) => !isOpen && handleCloseModal()}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Editar Colaborador</DialogTitle>
+            <DialogTitle>{modalState.type === 'edit' ? 'Editar Colaborador' : 'Criar Novo Colaborador'}</DialogTitle>
           </DialogHeader>
           <ColaboradorFormComponent
             formData={formData}
             setFormData={setFormData}
-            onSubmit={handleUpdateColaborador}
-            onCancel={() => handleCloseEditDialog(false)}
+            onSubmit={handleSubmit}
+            onCancel={handleCloseModal}
             isSubmitting={isSubmitting}
-            submitText="Salvar Alterações"
-            isEdit
+            submitText={modalState.type === 'edit' ? 'Salvar Alterações' : 'Criar Colaborador'}
           />
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={modalState.type === 'docs'} onOpenChange={(isOpen) => !isOpen && handleCloseModal()}>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Documentos de {modalState.data?.nome}</DialogTitle>
+          </DialogHeader>
+          {modalState.data && (
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="list"><FileText className="h-4 w-4 mr-2" />Documentos</TabsTrigger>
+                <TabsTrigger value="upload"><Upload className="h-4 w-4 mr-2" />Upload</TabsTrigger>
+              </TabsList>
+              <TabsContent value="list" className="flex-1 overflow-auto mt-4">
+                <DocumentList colaboradorId={modalState.data.id} className="border-0 shadow-none p-0" />
+              </TabsContent>
+              <TabsContent value="upload" className="flex-1 overflow-auto mt-4">
+                <DocumentUpload colaboradorId={modalState.data.id} onUploadComplete={() => setActiveTab('list')} className="border-0 shadow-none p-0" />
+              </TabsContent>
+            </Tabs>
+          )}
         </DialogContent>
       </Dialog>
     </div>

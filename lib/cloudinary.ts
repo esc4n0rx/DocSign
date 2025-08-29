@@ -174,4 +174,87 @@ export function generateUploadSignature(colaboradorId: number, matricula: string
   }
 }
 
+/**
+ * Faz upload de um buffer criptografado para o Cloudinary
+ * @param encryptedBuffer - Buffer criptografado
+ * @param fileName - Nome do arquivo
+ * @param folderPath - Caminho da pasta
+ * @returns Resultado do upload
+ */
+export async function uploadEncryptedBuffer(
+  encryptedBuffer: Buffer,
+  fileName: string,
+  folderPath: string
+) {
+  try {
+    // Converter buffer para base64
+    const base64Data = `data:application/octet-stream;base64,${encryptedBuffer.toString('base64')}`
+    
+    const uploadResult = await cloudinary.uploader.upload(base64Data, {
+      folder: folderPath,
+      public_id: fileName,
+      resource_type: 'raw', // Para arquivos binários
+      tags: ['documento', 'criptografado']
+    })
+
+    return {
+      success: true,
+      public_id: uploadResult.public_id,
+      secure_url: uploadResult.secure_url,
+      bytes: uploadResult.bytes
+    }
+  } catch (error) {
+    console.error('Erro no upload para Cloudinary:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro desconhecido'
+    }
+  }
+}
+
+/**
+ * Baixa um arquivo do Cloudinary como buffer
+ * @param publicId - ID público do arquivo
+ * @returns Buffer do arquivo
+ */
+export async function downloadFromCloudinary(publicId: string): Promise<Buffer> {
+  try {
+    const response = await fetch(cloudinary.url(publicId, { resource_type: 'raw' }))
+    
+    if (!response.ok) {
+      throw new Error(`Erro HTTP: ${response.status}`)
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    return Buffer.from(arrayBuffer)
+  } catch (error) {
+    console.error('Erro ao baixar do Cloudinary:', error)
+    throw new Error('Falha no download do documento')
+  }
+}
+
+/**
+ * Remove um arquivo específico do Cloudinary
+ * @param publicId - ID público do arquivo
+ * @returns Resultado da operação
+ */
+export async function deleteFromCloudinary(publicId: string) {
+  try {
+    const result = await cloudinary.uploader.destroy(publicId, {
+      resource_type: 'raw'
+    })
+
+    return {
+      success: result.result === 'ok',
+      result: result.result
+    }
+  } catch (error) {
+    console.error('Erro ao deletar do Cloudinary:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro desconhecido'
+    }
+  }
+}
+
 export default cloudinary
