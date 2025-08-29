@@ -48,95 +48,6 @@ export async function createColaboradorFolder(colaboradorId: number, matricula: 
 }
 
 /**
- * Remove uma pasta do Cloudinary
- * @param colaboradorId - ID do colaborador
- * @param matricula - Matrícula do colaborador
- * @returns Promise com resultado da operação
- */
-export async function deleteColaboradorFolder(colaboradorId: number, matricula: string) {
-  try {
-    const folderName = `colaboradores/${matricula}_${colaboradorId}`
-    
-    // Listar todos os recursos na pasta
-    const resources = await cloudinary.api.resources({
-      type: 'upload',
-      prefix: folderName,
-      max_results: 500
-    })
-
-    // Deletar todos os recursos
-    if (resources.resources.length > 0) {
-      const publicIds = resources.resources.map((resource: any) => resource.public_id)
-      await cloudinary.api.delete_resources(publicIds)
-    }
-
-    // Tentar deletar a pasta (pode não funcionar se não estiver completamente vazia)
-    try {
-      await cloudinary.api.delete_folder(folderName)
-    } catch (folderError) {
-      console.warn('Aviso: Pasta pode não ter sido completamente removida:', folderError)
-    }
-
-    console.log(`Pasta removida do Cloudinary: ${folderName}`)
-    
-    return {
-      success: true,
-      folderName,
-      deletedResources: resources.resources.length
-    }
-  } catch (error) {
-    console.error('Erro ao remover pasta do Cloudinary:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Erro desconhecido'
-    }
-  }
-}
-
-/**
- * Lista arquivos de um colaborador no Cloudinary
- * @param colaboradorId - ID do colaborador
- * @param matricula - Matrícula do colaborador
- * @returns Promise com lista de arquivos
- */
-export async function listColaboradorFiles(colaboradorId: number, matricula: string) {
-  try {
-    const folderName = `colaboradores/${matricula}_${colaboradorId}`
-    
-    const resources = await cloudinary.api.resources({
-      type: 'upload',
-      prefix: folderName,
-      max_results: 100,
-      resource_type: 'auto'
-    })
-
-    // Filtrar o placeholder
-    const files = resources.resources.filter((resource: any) => 
-      !resource.public_id.endsWith('.placeholder')
-    )
-
-    return {
-      success: true,
-      files: files.map((file: any) => ({
-        public_id: file.public_id,
-        secure_url: file.secure_url,
-        format: file.format,
-        bytes: file.bytes,
-        created_at: file.created_at,
-        resource_type: file.resource_type
-      }))
-    }
-  } catch (error) {
-    console.error('Erro ao listar arquivos do Cloudinary:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Erro desconhecido',
-      files: []
-    }
-  }
-}
-
-/**
  * Gera URL de upload assinada para um colaborador
  * @param colaboradorId - ID do colaborador
  * @param matricula - Matrícula do colaborador
@@ -150,8 +61,8 @@ export function generateUploadSignature(colaboradorId: number, matricula: string
     const params = {
       timestamp,
       folder: folderName,
-      resource_type: 'auto',
-      allowed_formats: 'pdf,jpg,jpeg,png,doc,docx'
+      resource_type: 'raw', // Apenas PDFs como raw
+      allowed_formats: 'pdf'
     }
 
     const signature = cloudinary.utils.api_sign_request(params, cloudinaryConfig.api_secret!)
@@ -175,11 +86,11 @@ export function generateUploadSignature(colaboradorId: number, matricula: string
 }
 
 /**
- * Faz upload de um buffer de arquivo para o Cloudinary
- * @param fileBuffer - Buffer do arquivo
+ * Faz upload de um buffer de PDF para o Cloudinary
+ * @param fileBuffer - Buffer do arquivo PDF
  * @param fileName - Nome do arquivo
  * @param folderPath - Caminho da pasta
- * @param mimeType - Tipo MIME do arquivo
+ * @param mimeType - Tipo MIME do arquivo (sempre application/pdf)
  * @returns Resultado do upload
  */
 export async function uploadFileBuffer(
@@ -189,15 +100,21 @@ export async function uploadFileBuffer(
   mimeType: string
 ) {
   try {
-    // Converter buffer para base64 com o tipo MIME correto
-    const base64Data = `data:${mimeType};base64,${fileBuffer.toString('base64')}`
+    console.log(`Upload PDF para Cloudinary - Arquivo: ${fileName}`)
+    
+    // Converter buffer para base64
+    const base64Data = `data:application/pdf;base64,${fileBuffer.toString('base64')}`
     
     const uploadResult = await cloudinary.uploader.upload(base64Data, {
       folder: folderPath,
       public_id: fileName,
-      resource_type: 'auto', // Detectar automaticamente o tipo de recurso
-      tags: ['documento']
+      resource_type: 'raw', // SEMPRE raw para PDFs
+      tags: ['documento', 'pdf'],
+      use_filename: true,
+      unique_filename: false
     })
+
+    console.log(`Upload PDF bem-sucedido - Public ID: ${uploadResult.public_id}`)
 
     return {
       success: true,
@@ -206,7 +123,7 @@ export async function uploadFileBuffer(
       bytes: uploadResult.bytes
     }
   } catch (error) {
-    console.error('Erro no upload para Cloudinary:', error)
+    console.error('Erro no upload PDF para Cloudinary:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Erro desconhecido'
@@ -215,35 +132,57 @@ export async function uploadFileBuffer(
 }
 
 /**
- * Baixa um arquivo do Cloudinary como buffer
- * @param publicId - ID público do arquivo
- * @returns Buffer do arquivo
+ * Baixa um PDF do Cloudinary como buffer
+ * @param publicId - ID público do arquivo PDF
+ * @returns Buffer do arquivo PDF
  */
 export async function downloadFromCloudinary(publicId: string): Promise<Buffer> {
   try {
-    const response = await fetch(cloudinary.url(publicId, { resource_type: 'auto' }))
+    console.log(`Baixando PDF com publicId: ${publicId}`)
+    
+    // Gerar URL direta para PDF como recurso raw
+    const url = cloudinary.url(publicId, { 
+      resource_type: 'raw',
+      secure: true,
+      type: 'upload'
+    })
+    
+    console.log(`URL PDF gerada: ${url}`)
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; PDFViewer/1.0)',
+        'Accept': 'application/pdf'
+      }
+    })
+    
+    console.log(`Status da resposta PDF: ${response.status}`)
+    console.log(`Content-Type: ${response.headers.get('content-type')}`)
+    console.log(`Content-Length: ${response.headers.get('content-length')}`)
     
     if (!response.ok) {
-      throw new Error(`Erro HTTP: ${response.status}`)
+      throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}. URL: ${url}`)
     }
 
     const arrayBuffer = await response.arrayBuffer()
+    console.log(`Download PDF bem-sucedido - Tamanho: ${arrayBuffer.byteLength} bytes`)
     return Buffer.from(arrayBuffer)
   } catch (error) {
-    console.error('Erro ao baixar do Cloudinary:', error)
-    throw new Error('Falha no download do documento')
+    console.error('Erro ao baixar PDF do Cloudinary:', error)
+    throw new Error('Falha no download do documento PDF')
   }
 }
 
 /**
- * Remove um arquivo específico do Cloudinary
- * @param publicId - ID público do arquivo
+ * Remove um PDF do Cloudinary
+ * @param publicId - ID público do arquivo PDF
  * @returns Resultado da operação
  */
 export async function deleteFromCloudinary(publicId: string) {
   try {
     const result = await cloudinary.uploader.destroy(publicId, {
-      resource_type: 'auto'
+      resource_type: 'raw' // PDFs são sempre raw
     })
 
     return {
@@ -251,10 +190,109 @@ export async function deleteFromCloudinary(publicId: string) {
       result: result.result
     }
   } catch (error) {
-    console.error('Erro ao deletar do Cloudinary:', error)
+    console.error('Erro ao deletar PDF do Cloudinary:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Erro desconhecido'
+    }
+  }
+}
+
+/**
+ * Remove uma pasta do Cloudinary
+ * @param colaboradorId - ID do colaborador
+ * @param matricula - Matrícula do colaborador
+ * @returns Promise com resultado da operação
+ */
+export async function deleteColaboradorFolder(colaboradorId: number, matricula: string) {
+  try {
+    const folderName = `colaboradores/${matricula}_${colaboradorId}`
+    
+    // Listar todos os recursos raw na pasta (PDFs)
+    const resources = await cloudinary.api.resources({
+      type: 'upload',
+      prefix: folderName,
+      max_results: 500,
+      resource_type: 'raw'
+    })
+
+    // Deletar todos os PDFs
+    if (resources.resources.length > 0) {
+      const publicIds = resources.resources.map((resource: any) => resource.public_id)
+      await cloudinary.api.delete_resources(publicIds, {
+        resource_type: 'raw'
+      })
+    }
+
+    // Deletar placeholder de imagem se existir
+    try {
+      await cloudinary.uploader.destroy(`${folderName}/.placeholder`, {
+        resource_type: 'image'
+      })
+    } catch (placeholderError) {
+      console.warn('Placeholder não encontrado ou já removido')
+    }
+
+    // Tentar deletar a pasta
+    try {
+      await cloudinary.api.delete_folder(folderName)
+    } catch (folderError) {
+      console.warn('Aviso: Pasta pode não ter sido completamente removida:', folderError)
+    }
+
+    console.log(`Pasta removida do Cloudinary: ${folderName}`)
+    
+    return {
+      success: true,
+      folderName,
+      deletedResources: resources.resources.length
+    }
+  } catch (error) {
+    console.error('Erro ao remover pasta do Cloudinary:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro desconhecido'
+    }
+  }
+}
+
+/**
+ * Lista PDFs de um colaborador no Cloudinary
+ * @param colaboradorId - ID do colaborador
+ * @param matricula - Matrícula do colaborador
+ * @returns Promise com lista de PDFs
+ */
+export async function listColaboradorFiles(colaboradorId: number, matricula: string) {
+  try {
+    const folderName = `colaboradores/${matricula}_${colaboradorId}`
+    
+    const resources = await cloudinary.api.resources({
+      type: 'upload',
+      prefix: folderName,
+      max_results: 100,
+      resource_type: 'raw' // Apenas PDFs
+    })
+
+    // Filtrar apenas PDFs (não precisamos filtrar placeholder pois está em 'image')
+    const files = resources.resources.map((file: any) => ({
+      public_id: file.public_id,
+      secure_url: file.secure_url,
+      format: file.format,
+      bytes: file.bytes,
+      created_at: file.created_at,
+      resource_type: file.resource_type
+    }))
+
+    return {
+      success: true,
+      files
+    }
+  } catch (error) {
+    console.error('Erro ao listar PDFs do Cloudinary:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro desconhecido',
+      files: []
     }
   }
 }

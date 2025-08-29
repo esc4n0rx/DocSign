@@ -3,9 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/auth'
 import { downloadFromCloudinary } from '@/lib/cloudinary'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const supabase = await createClient()
     
@@ -19,7 +18,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       )
     }
 
-    const documentoId = parseInt(params.id)
+    // Aguardar params antes de usar suas propriedades
+    const resolvedParams = await params
+    const documentoId = parseInt(resolvedParams.id)
 
     if (isNaN(documentoId)) {
       return NextResponse.json(
@@ -45,6 +46,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     console.log(`Servindo download do documento: ${documento.nome}`)
+    console.log(`Cloudinary Public ID: ${documento.cloudinary_public_id}`)
 
     // Baixar arquivo diretamente do Cloudinary
     const fileBuffer = await downloadFromCloudinary(documento.cloudinary_public_id)
