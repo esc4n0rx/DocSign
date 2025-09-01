@@ -39,11 +39,8 @@ import {
   Upload
 } from "lucide-react"
 
-// --- CONSTANTS ---
 const departamentos = [
-  "TI", "Recursos Humanos", "Comercial", "Design",
-  "Financeiro", "Marketing", "Operações", "Administrativo"
-]
+  "Operação", "Recursos Humanos", "Comercial", "Administrativo"]
 
 const statusOptions: Array<Colaborador['status']> = [
   "Ativo", "Inativo", "Férias", "Licença Médica"
@@ -53,9 +50,6 @@ const initialFormData: ColaboradorFormData = {
   nome: "", matricula: "", cargo: "", departamento: "",
   status: "Ativo", email: "", telefone: "", data_admissao: "",
 }
-
-// --- SUB-COMPONENTS (within the same file) ---
-
 interface ColaboradorFormProps {
   formData: ColaboradorFormData
   setFormData: React.Dispatch<React.SetStateAction<ColaboradorFormData>>
@@ -121,9 +115,6 @@ const ColaboradorFormComponent = ({
     </div>
   </form>
 )
-
-// --- MAIN COMPONENT ---
-
 export default function ColaboradoresSection() {
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -186,14 +177,14 @@ export default function ColaboradoresSection() {
         telefone: data.telefone || "", data_admissao: data.data_admissao,
       });
     } else if (type === 'docs') {
-      setActiveTab('list'); // Reset tab on open
+      setActiveTab('list');
     }
     setModalState({ type, data });
   }
   
   const handleCloseModal = () => {
     setModalState({ type: null });
-    setFormData(initialFormData); // Reset form data on any modal close
+    setFormData(initialFormData);
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -363,8 +354,6 @@ export default function ColaboradoresSection() {
           ))}
         </div>
       )}
-
-      {/* --- MODALS --- */}
       <Dialog open={modalState.type === 'create' || modalState.type === 'edit'} onOpenChange={(isOpen) => !isOpen && handleCloseModal()}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>

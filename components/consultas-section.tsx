@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import SharedLinkManager from "@/components/SharedLinkManager"
 import { Badge } from "@/components/ui/badge"
 import { 
   Select, 
@@ -373,6 +374,7 @@ export function ConsultasSection() {
                     </div>
                   </div>
                 </div>
+                <SharedLinkManager colaborador={selectedColaborador} />
                 <div className="flex items-center gap-2">
                   <Button variant="outline" onClick={clearSelection}>
                     <Search className="h-4 w-4 mr-2" />
