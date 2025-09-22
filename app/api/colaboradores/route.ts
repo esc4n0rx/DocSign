@@ -258,11 +258,13 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// Manter os outros métodos (GET, DELETE) inalterados
-export async function GET() {
+const escapeIlikePattern = (value: string) =>
+  value.replace(/[\\%_,]/g, (match) => `\\${match}`)
+
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
-    
+
     // Verificar autenticação
     const { data: { user: currentUser } } = await supabase.auth.getUser()
     
@@ -274,12 +276,22 @@ export async function GET() {
     }
 
     const serviceSupabase = createServiceClient()
-    
-    // Buscar todos os colaboradores
-    const { data: colaboradores, error } = await serviceSupabase
+
+    const { searchParams } = new URL(request.url)
+    const search = searchParams.get('search')?.trim()
+
+    let query = serviceSupabase
       .from('colaboradores')
       .select('*')
-      .order('nome')
+
+    if (search) {
+      const likePattern = `%${escapeIlikePattern(search)}%`
+      query = query.or(
+        `matricula.ilike.${likePattern},nome.ilike.${likePattern}`
+      )
+    }
+
+    const { data: colaboradores, error } = await query.order('nome')
 
     if (error) {
       console.error('Erro ao buscar colaboradores:', error)
