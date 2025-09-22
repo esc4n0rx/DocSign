@@ -1,11 +1,20 @@
 "use client"
+import type { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/AuthContext"
+import type { Usuario } from "@/types/auth"
 
-const menuItems = [
+type MenuItem = {
+  name: string
+  href: string
+  icon: ReactNode
+  requiredPermissions?: Array<Usuario["permissao"]>
+}
+
+const menuItems: MenuItem[] = [
   {
     name: "Consultas",
     href: "/dashboard/consultas",
@@ -33,6 +42,7 @@ const menuItems = [
         />
       </svg>
     ),
+    requiredPermissions: ["Admin", "Editor"],
   },
   {
     name: "Usuários",
@@ -47,7 +57,7 @@ const menuItems = [
         />
       </svg>
     ),
-    adminOnly: true,
+    requiredPermissions: ["Admin", "Editor"],
   },
   {
     name: "Configurações",
@@ -63,7 +73,7 @@ const menuItems = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     ),
-    adminOnly: true,
+    requiredPermissions: ["Admin"],
   },
 ]
 
@@ -71,11 +81,18 @@ export function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
 
-  const filteredMenuItems = menuItems.filter(item => {
-    if (item.adminOnly) {
-      return user?.usuario?.permissao === 'Admin'
+  const userPermission = user?.usuario?.permissao
+
+  const filteredMenuItems = menuItems.filter((item) => {
+    if (!item.requiredPermissions) {
+      return true
     }
-    return true
+
+    if (!userPermission) {
+      return false
+    }
+
+    return item.requiredPermissions.includes(userPermission)
   })
 
   const handleLogout = () => {
