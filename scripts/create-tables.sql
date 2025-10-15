@@ -1,11 +1,12 @@
 -- Tabela de usuários (complementar à auth.users do Supabase)
 CREATE TABLE IF NOT EXISTS public.usuarios (
-  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   matricula VARCHAR(50) UNIQUE NOT NULL,
   nome VARCHAR(255) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   permissao VARCHAR(50) NOT NULL DEFAULT 'Visualizador' CHECK (permissao IN ('Admin', 'Editor', 'Visualizador')),
   status VARCHAR(20) NOT NULL DEFAULT 'Ativo' CHECK (status IN ('Ativo', 'Inativo')),
+  password TEXT NOT NULL,
   ultimo_acesso TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())

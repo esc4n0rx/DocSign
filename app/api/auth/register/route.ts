@@ -1,51 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createServerClient } from '@supabase/ssr'
+import bcrypt from 'bcryptjs'
+import { createServiceClient, getAuthUser, createUser } from '@/lib/auth'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
-// Cliente com service role para operações administrativas
-function createServiceClient() {
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        getAll() { return [] },
-        setAll() {},
-      },
-    }
-  )
+async function ensureAdmin() {
+  const authUser = await getAuthUser()
+
+  if (!authUser) {
+    return { response: NextResponse.json({ error: 'Não autorizado' }, { status: 401 }) }
+  }
+
+  if (authUser.usuario?.permissao !== 'Admin') {
+    return { response: NextResponse.json({ error: 'Apenas administradores podem realizar esta ação' }, { status: 403 }) }
+  }
+
+  return { authUser, serviceSupabase: createServiceClient() }
 }
 
 export async function POST(request: NextRequest) {
   console.log('=== Iniciando criação de usuário ===')
-  
+
   try {
-    const supabase = await createClient()
-    
-    // Verificar se o usuário atual é admin
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'Não autorizado' },
-        { status: 401 }
-      )
-    }
+    const adminContext = await ensureAdmin()
 
-    const serviceSupabase = createServiceClient()
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (!currentUserData || currentUserData.permissao !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Apenas administradores podem criar usuários' },
-        { status: 403 }
-      )
+    if ('response' in adminContext) {
+      return adminContext.response
     }
 
     const body = await request.json()
@@ -58,63 +38,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verificar se matrícula já existe
-    const { data: existingUser } = await serviceSupabase
-      .from('usuarios')
-      .select('matricula')
-      .eq('matricula', matricula)
-      .single()
+    console.log('Criando usuário na tabela usuarios...')
 
-    if (existingUser) {
-      return NextResponse.json(
-        { error: 'Matrícula já cadastrada' },
-        { status: 409 }
-      )
-    }
-
-    console.log('Criando usuário no Supabase Auth...')
-    
-    // Criar usuário no Supabase Auth usando service client
-    const { data: authUser, error: authError } = await serviceSupabase.auth.admin.createUser({
+    const result = await createUser({
+      nome,
       email,
-      password: senha,
-      email_confirm: true,
-      user_metadata: { matricula, nome }
+      matricula,
+      permissao,
+      status,
+      senha,
     })
 
-    if (authError || !authUser.user) {
-      console.error('Erro ao criar usuário no auth:', authError)
+    if (!result.success || !result.user) {
       return NextResponse.json(
-        { error: 'Erro ao criar usuário: ' + (authError?.message || 'Erro desconhecido') },
-        { status: 500 }
-      )
-    }
-
-    console.log('Usuário criado no auth, criando registro na tabela usuarios...')
-
-    // Criar registro na tabela usuarios
-    const { data: usuario, error: usuarioError } = await serviceSupabase
-      .from('usuarios')
-      .insert({
-        id: authUser.user.id,
-        matricula,
-        nome,
-        email,
-        permissao,
-        status
-      })
-      .select()
-      .single()
-
-    if (usuarioError) {
-      console.error('Erro ao criar registro na tabela usuarios:', usuarioError)
-      
-      // Se falhou, limpar o usuário do auth
-      await serviceSupabase.auth.admin.deleteUser(authUser.user.id)
-      
-      return NextResponse.json(
-        { error: 'Erro ao salvar dados do usuário' },
-        { status: 500 }
+        { error: result.error || 'Erro ao criar usuário' },
+        { status: 400 }
       )
     }
 
@@ -122,7 +60,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       message: 'Usuário criado com sucesso',
-      usuario
+      usuario: result.user
     })
 
   } catch (error) {
@@ -136,36 +74,16 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar se o usuário atual é admin
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'Não autorizado' },
-        { status: 401 }
-      )
-    }
+    const adminContext = await ensureAdmin()
 
-    const serviceSupabase = createServiceClient()
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (!currentUserData || currentUserData.permissao !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Apenas administradores podem listar usuários' },
-        { status: 403 }
-      )
+    if ('response' in adminContext) {
+      return adminContext.response
     }
 
     // Buscar todos os usuários
-    const { data: usuarios, error } = await serviceSupabase
+    const { data: usuarios, error } = await adminContext.serviceSupabase
       .from('usuarios')
-      .select('*')
+      .select('id, matricula, nome, email, permissao, status, ultimo_acesso, created_at, updated_at')
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -189,30 +107,10 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar se o usuário atual é admin
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'Não autorizado' },
-        { status: 401 }
-      )
-    }
+    const adminContext = await ensureAdmin()
 
-    const serviceSupabase = createServiceClient()
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (!currentUserData || currentUserData.permissao !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Apenas administradores podem editar usuários' },
-        { status: 403 }
-      )
+    if ('response' in adminContext) {
+      return adminContext.response
     }
 
     const body = await request.json()
@@ -226,7 +124,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Verificar se matrícula já existe para outro usuário
-    const { data: existingUser } = await serviceSupabase
+    const { data: existingUser } = await adminContext.serviceSupabase
       .from('usuarios')
       .select('id, matricula')
       .eq('matricula', matricula)
@@ -240,56 +138,23 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Atualizar senha se fornecida
+    const updates: Record<string, any> = {
+      matricula,
+      nome,
+      email,
+      permissao,
+      status,
+    }
+
     if (senha && senha.trim()) {
-      const { error: passwordError } = await serviceSupabase.auth.admin.updateUserById(
-        id,
-        { password: senha }
-      )
-
-      if (passwordError) {
-        console.error('Erro ao atualizar senha:', passwordError)
-        return NextResponse.json(
-          { error: 'Erro ao atualizar senha' },
-          { status: 500 }
-        )
-      }
+      updates.password = await bcrypt.hash(senha, 10)
     }
 
-    // Atualizar email no auth se mudou
-    const { data: currentData } = await serviceSupabase
+    const { data: usuario, error: usuarioError } = await adminContext.serviceSupabase
       .from('usuarios')
-      .select('email')
+      .update(updates)
       .eq('id', id)
-      .single()
-
-    if (currentData && currentData.email !== email) {
-      const { error: emailError } = await serviceSupabase.auth.admin.updateUserById(
-        id,
-        { email }
-      )
-
-      if (emailError) {
-        console.error('Erro ao atualizar email:', emailError)
-        return NextResponse.json(
-          { error: 'Erro ao atualizar email' },
-          { status: 500 }
-        )
-      }
-    }
-
-    // Atualizar dados na tabela usuarios
-    const { data: usuario, error: usuarioError } = await serviceSupabase
-      .from('usuarios')
-      .update({
-        matricula,
-        nome,
-        email,
-        permissao,
-        status
-      })
-      .eq('id', id)
-      .select()
+      .select('id, matricula, nome, email, permissao, status, ultimo_acesso, created_at, updated_at')
       .single()
 
     if (usuarioError) {
@@ -316,30 +181,10 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar se o usuário atual é admin
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'Não autorizado' },
-        { status: 401 }
-      )
-    }
+    const adminContext = await ensureAdmin()
 
-    const serviceSupabase = createServiceClient()
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (!currentUserData || currentUserData.permissao !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Apenas administradores podem remover usuários' },
-        { status: 403 }
-      )
+    if ('response' in adminContext) {
+      return adminContext.response
     }
 
     const { searchParams } = new URL(request.url)
@@ -353,7 +198,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Não permitir que admin delete a si mesmo
-    if (userId === currentUser.id) {
+    if (userId === adminContext.authUser.id) {
       return NextResponse.json(
         { error: 'Não é possível remover seu próprio usuário' },
         { status: 403 }
@@ -361,7 +206,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Verificar se usuário existe
-    const { data: userToDelete } = await serviceSupabase
+    const { data: userToDelete } = await adminContext.serviceSupabase
       .from('usuarios')
       .select('matricula')
       .eq('id', userId)
@@ -382,8 +227,10 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Remover usuário do auth (isso automaticamente remove da tabela usuarios por CASCADE)
-    const { error: deleteError } = await serviceSupabase.auth.admin.deleteUser(userId)
+    const { error: deleteError } = await adminContext.serviceSupabase
+      .from('usuarios')
+      .delete()
+      .eq('id', userId)
 
     if (deleteError) {
       console.error('Erro ao remover usuário:', deleteError)

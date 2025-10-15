@@ -1,50 +1,65 @@
-import { createClient } from '@/lib/supabase/server'
+import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
-import { Usuario, AuthUser } from '@/types/auth'
+import { randomUUID } from 'crypto'
+import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import { Usuario, AuthUser } from '@/types/auth'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key'
+const AUTH_COOKIE_NAME = 'auth-token'
 
 // Cliente com service role para operações administrativas
 export function createServiceClient() {
-    return createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          getAll() { return [] },
-          setAll() {},
-        },
-      }
-    )
-  }
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      cookies: {
+        getAll() { return [] },
+        setAll() {},
+      },
+    }
+  )
+}
+
+function sanitizeUsuario(usuario: any): Usuario {
+  const { password, ...usuarioSemSenha } = usuario
+  return usuarioSemSenha as Usuario
+}
+
 export async function getAuthUser(): Promise<AuthUser | null> {
-  const supabase = await createClient()
-  
   try {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    
-    if (error || !user) {
-      console.log('Erro ao buscar usuário do auth:', error)
+    const cookieStore = await cookies()
+    const token = cookieStore.get(AUTH_COOKIE_NAME)?.value
+
+    if (!token) {
+      return null
+    }
+
+    const payload = verifyJWT(token)
+
+    if (!payload) {
       return null
     }
 
     const serviceSupabase = createServiceClient()
     const { data: usuarioData, error: usuarioError } = await serviceSupabase
       .from('usuarios')
-      .select('*')
-      .eq('id', user.id)
+      .select('id, matricula, nome, email, permissao, status, ultimo_acesso, created_at, updated_at, password')
+      .eq('id', payload.sub)
       .single()
 
-    if (usuarioError) {
+    if (usuarioError || !usuarioData || usuarioData.status !== 'Ativo') {
       console.log('Erro ao buscar dados do usuário:', usuarioError)
       return null
     }
 
+    const usuario = sanitizeUsuario(usuarioData)
+
     return {
-      id: user.id,
-      email: user.email!,
-      usuario: usuarioData
+      id: usuario.id,
+      email: usuario.email,
+      usuario,
     }
   } catch (error) {
     console.error('Erro ao buscar usuário:', error)
@@ -54,15 +69,14 @@ export async function getAuthUser(): Promise<AuthUser | null> {
 
 export async function authenticateByMatricula(matricula: string, senha: string): Promise<AuthUser | null> {
   console.log('Tentando autenticar usuário:', matricula)
-  
+
   try {
-    // Usar service client para busca inicial (bypassa RLS)
     const serviceSupabase = createServiceClient()
-    
+
     console.log('Buscando usuário por matrícula...')
     const { data: usuario, error: usuarioError } = await serviceSupabase
       .from('usuarios')
-      .select('*')
+      .select('id, matricula, nome, email, permissao, status, ultimo_acesso, created_at, updated_at, password')
       .eq('matricula', matricula)
       .eq('status', 'Ativo')
       .single()
@@ -74,38 +88,31 @@ export async function authenticateByMatricula(matricula: string, senha: string):
       return null
     }
 
-    // Usar client normal para autenticação
-    const supabase = await createClient()
-    
-    console.log('Tentando fazer login com email:', usuario.email)
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: usuario.email,
-      password: senha,
-    })
-
-    console.log('Resultado do login:', { 
-      user: !!authData.user, 
-      session: !!authData.session, 
-      error: authError 
-    })
-
-    if (authError || !authData.user) {
-      console.log('Erro na autenticação:', authError)
+    if (!usuario.password) {
+      console.log('Usuário sem senha cadastrada:', usuario.matricula)
       return null
     }
 
-    // Atualizar último acesso usando service client
+    const senhaValida = await bcrypt.compare(senha, usuario.password)
+
+    if (!senhaValida) {
+      console.log('Senha inválida para usuário:', usuario.matricula)
+      return null
+    }
+
     await serviceSupabase
       .from('usuarios')
       .update({ ultimo_acesso: new Date().toISOString() })
-      .eq('id', authData.user.id)
+      .eq('id', usuario.id)
 
     console.log('Login bem-sucedido para usuário:', usuario.matricula)
 
+    const usuarioSanitizado = sanitizeUsuario(usuario)
+
     return {
-      id: authData.user.id,
-      email: authData.user.email!,
-      usuario
+      id: usuarioSanitizado.id,
+      email: usuarioSanitizado.email,
+      usuario: usuarioSanitizado
     }
   } catch (error) {
     console.error('Erro na autenticação:', error)
@@ -142,11 +149,10 @@ export async function createUser(userData: {
   permissao: 'Admin' | 'Editor' | 'Visualizador'
   status: 'Ativo' | 'Inativo'
   senha: string
-}): Promise<{ success: boolean; user?: any; error?: string }> {
+}): Promise<{ success: boolean; user?: Usuario; error?: string }> {
   try {
     const serviceSupabase = createServiceClient()
-    
-    // Verificar se matrícula já existe
+
     const { data: existingUser } = await serviceSupabase
       .from('usuarios')
       .select('matricula')
@@ -157,43 +163,39 @@ export async function createUser(userData: {
       return { success: false, error: 'Matrícula já cadastrada' }
     }
 
-    // Criar usuário no Supabase Auth
-    const { data: authUser, error: authError } = await serviceSupabase.auth.admin.createUser({
-      email: userData.email,
-      password: userData.senha,
-      email_confirm: true,
-      user_metadata: { 
-        matricula: userData.matricula, 
-        nome: userData.nome 
-      }
-    })
+    const { data: existingEmail } = await serviceSupabase
+      .from('usuarios')
+      .select('email')
+      .eq('email', userData.email)
+      .single()
 
-    if (authError || !authUser.user) {
-      return { success: false, error: authError?.message || 'Erro ao criar usuário no auth' }
+    if (existingEmail) {
+      return { success: false, error: 'Email já cadastrado' }
     }
 
-    // Criar registro na tabela usuarios
+    const hashedPassword = await bcrypt.hash(userData.senha, 10)
+    const userId = randomUUID()
+
     const { data: usuario, error: usuarioError } = await serviceSupabase
       .from('usuarios')
       .insert({
-        id: authUser.user.id,
+        id: userId,
         matricula: userData.matricula,
         nome: userData.nome,
         email: userData.email,
         permissao: userData.permissao,
-        status: userData.status
+        status: userData.status,
+        password: hashedPassword,
       })
-      .select()
+      .select('id, matricula, nome, email, permissao, status, ultimo_acesso, created_at, updated_at')
       .single()
 
-    if (usuarioError) {
-      // Se falhou, limpar o usuário do auth
-      await serviceSupabase.auth.admin.deleteUser(authUser.user.id)
+    if (usuarioError || !usuario) {
       return { success: false, error: 'Erro ao salvar dados do usuário' }
     }
 
-    return { success: true, user: usuario }
-    
+    return { success: true, user: usuario as Usuario }
+
   } catch (error) {
     console.error('Erro ao criar usuário:', error)
     return { success: false, error: 'Erro interno do servidor' }

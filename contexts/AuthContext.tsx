@@ -3,7 +3,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthUser, LoginCredentials } from '@/types/auth'
-import { createClient } from '@/lib/supabase/client'
 
 interface AuthContextType {
   user: AuthUser | null
@@ -80,20 +79,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     checkAuth()
-
-    // Escutar mudanças de autenticação do Supabase
-    const supabase = createClient()
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        setUser(null)
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        await checkAuth()
-      }
-    })
-
-    return () => subscription.unsubscribe()
   }, [])
 
   return (
