@@ -1,24 +1,38 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServiceClient, verifyJWT } from '@/lib/auth'
 
 export async function middleware(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar se o usuário está autenticado
-    const { data: { user } } = await supabase.auth.getUser()
+    const token = request.cookies.get('auth-token')?.value
+    let isAuthenticated = false
+
+    if (token) {
+      const payload = verifyJWT(token)
+
+      if (payload) {
+        const serviceSupabase = createServiceClient()
+        const { data: usuario } = await serviceSupabase
+          .from('usuarios')
+          .select('id')
+          .eq('id', payload.sub)
+          .eq('status', 'Ativo')
+          .single()
+
+        isAuthenticated = !!usuario
+      }
+    }
 
     const isAuthPage = request.nextUrl.pathname === '/'
     const isDashboard = request.nextUrl.pathname.startsWith('/dashboard')
 
     // Se não está autenticado e tenta acessar dashboard
-    if (!user && isDashboard) {
+    if (!isAuthenticated && isDashboard) {
       return NextResponse.redirect(new URL('/', request.url))
     }
 
     // Se está autenticado e tenta acessar página de login
-    if (user && isAuthPage) {
+    if (isAuthenticated && isAuthPage) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 

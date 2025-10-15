@@ -1,7 +1,6 @@
 // app/api/colaboradores/[id]/shared-link/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createServiceClient } from '@/lib/auth'
+import { createServiceClient, getAuthUser } from '@/lib/auth'
 import { generateSharedToken, formatSharedLinkUrl } from '@/lib/shared-link'
 
 // GET - Listar links compartilhados do colaborador
@@ -10,12 +9,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar autenticação
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
+    const authUser = await getAuthUser()
+
+    if (!authUser) {
       return NextResponse.json(
         { error: 'Não autorizado' },
         { status: 401 }
@@ -32,22 +28,14 @@ export async function GET(
       )
     }
 
-    const serviceSupabase = createServiceClient()
-
-    // Verificar permissões
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (!currentUserData || !['Admin', 'Editor'].includes(currentUserData.permissao)) {
+    if (!authUser.usuario || !['Admin', 'Editor'].includes(authUser.usuario.permissao)) {
       return NextResponse.json(
         { error: 'Apenas administradores e editores podem gerenciar links compartilhados' },
         { status: 403 }
       )
     }
 
+    const serviceSupabase = createServiceClient()
     // Buscar links compartilhados do colaborador
     const { data: sharedLinks, error } = await serviceSupabase
       .from('shared_links')
@@ -89,12 +77,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar autenticação
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
+    const authUser = await getAuthUser()
+
+    if (!authUser) {
       return NextResponse.json(
         { error: 'Não autorizado' },
         { status: 401 }
@@ -121,22 +106,14 @@ export async function POST(
       )
     }
 
-    const serviceSupabase = createServiceClient()
-
-    // Verificar permissões
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (!currentUserData || !['Admin', 'Editor'].includes(currentUserData.permissao)) {
+    if (!authUser.usuario || !['Admin', 'Editor'].includes(authUser.usuario.permissao)) {
       return NextResponse.json(
         { error: 'Apenas administradores e editores podem criar links compartilhados' },
         { status: 403 }
       )
     }
 
+    const serviceSupabase = createServiceClient()
     // Verificar se colaborador existe
     const { data: colaborador, error: colaboradorError } = await serviceSupabase
       .from('colaboradores')
@@ -171,7 +148,7 @@ export async function POST(
       .insert({
         colaborador_id: colaboradorId,
         token,
-        created_by: currentUser.id,
+        created_by: authUser.id,
         expires_at: expiresAt.toISOString(),
         is_active: true
       })
@@ -217,12 +194,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar autenticação
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
+    const authUser = await getAuthUser()
+
+    if (!authUser) {
       return NextResponse.json(
         { error: 'Não autorizado' },
         { status: 401 }
@@ -239,22 +213,14 @@ export async function PATCH(
       )
     }
 
-    const serviceSupabase = createServiceClient()
-
-    // Verificar permissões
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (!currentUserData || !['Admin', 'Editor'].includes(currentUserData.permissao)) {
+    if (!authUser.usuario || !['Admin', 'Editor'].includes(authUser.usuario.permissao)) {
       return NextResponse.json(
         { error: 'Apenas administradores e editores podem alterar links compartilhados' },
         { status: 403 }
       )
     }
 
+    const serviceSupabase = createServiceClient()
     // Atualizar link compartilhado
     const { error } = await serviceSupabase
       .from('shared_links')
@@ -292,12 +258,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar autenticação
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
+    const authUser = await getAuthUser()
+
+    if (!authUser) {
       return NextResponse.json(
         { error: 'Não autorizado' },
         { status: 401 }
@@ -314,22 +277,14 @@ export async function DELETE(
       )
     }
 
-    const serviceSupabase = createServiceClient()
-
-    // Verificar permissões
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (!currentUserData || !['Admin', 'Editor'].includes(currentUserData.permissao)) {
+    if (!authUser.usuario || !['Admin', 'Editor'].includes(authUser.usuario.permissao)) {
       return NextResponse.json(
         { error: 'Apenas administradores e editores podem remover links compartilhados' },
         { status: 403 }
       )
     }
 
+    const serviceSupabase = createServiceClient()
     // Remover link compartilhado
     const { error } = await serviceSupabase
       .from('shared_links')

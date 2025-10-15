@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createServiceClient } from '@/lib/auth'
+import { createServiceClient, getAuthUser } from '@/lib/auth'
 import { downloadFile } from '@/lib/storage-api'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar autenticação
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
+    const authUser = await getAuthUser()
+
+    if (!authUser) {
       return NextResponse.json(
         { error: 'Não autorizado' },
         { status: 401 }

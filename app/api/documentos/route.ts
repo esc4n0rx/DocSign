@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createServiceClient } from '@/lib/auth'
+import { createServiceClient, getAuthUser } from '@/lib/auth'
 import { deleteFile } from '@/lib/storage-api'
 
 // GET - Listar documentos de um colaborador
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar se o usuário atual tem permissão
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
+    const authUser = await getAuthUser()
+
+    if (!authUser) {
       return NextResponse.json(
         { error: 'Não autorizado' },
         { status: 401 }
@@ -28,9 +24,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const serviceSupabase = createServiceClient()
-
     // Buscar documentos do colaborador
+    const serviceSupabase = createServiceClient()
     const { data: documentos, error } = await serviceSupabase
       .from('documentos')
       .select(`
@@ -73,32 +68,23 @@ export async function GET(request: NextRequest) {
 // DELETE - Remover um documento
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar se o usuário atual tem permissão
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
+    const authUser = await getAuthUser()
+
+    if (!authUser) {
       return NextResponse.json(
         { error: 'Não autorizado' },
         { status: 401 }
       )
     }
 
-    const serviceSupabase = createServiceClient()
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (!currentUserData || !['Admin', 'Editor'].includes(currentUserData.permissao)) {
+    if (!authUser.usuario || !['Admin', 'Editor'].includes(authUser.usuario.permissao)) {
       return NextResponse.json(
         { error: 'Apenas administradores e editores podem remover documentos' },
         { status: 403 }
       )
     }
 
+    const serviceSupabase = createServiceClient()
     const { searchParams } = new URL(request.url)
     const documentoId = searchParams.get('id')
 
