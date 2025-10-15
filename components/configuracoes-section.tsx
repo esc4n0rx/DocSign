@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { ChangeEvent, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,13 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
+import { useToast } from "@/hooks/use-toast"
+
+interface ImportSummary {
+  colaboradoresCriados: number
+  documentosImportados: number
+  erros: string[]
+}
 
 interface ConfiguracaoSistema {
   tema: string
@@ -37,6 +44,75 @@ export function ConfiguracoesSection() {
   })
 
   const [isLoading, setIsLoading] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null)
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { toast } = useToast()
+
+  const handleImportData = async (file: File) => {
+    setSelectedFileName(file.name)
+    setImportSummary(null)
+    setIsImporting(true)
+
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const response = await fetch("/api/colaboradores/import", {
+        method: "POST",
+        body: formData,
+      })
+
+      const contentType = response.headers.get("content-type") || ""
+      let data: any = null
+      if (contentType.includes("application/json")) {
+        data = await response.json()
+      } else {
+        const rawPayload = (await response.text()).trim()
+        try {
+          data = JSON.parse(rawPayload)
+        } catch (parseError) {
+          const isLikelyHtml = rawPayload.startsWith("<")
+          const fallbackMessage = isLikelyHtml
+            ? "Resposta inesperada do servidor durante a importação."
+            : rawPayload || "Falha ao importar dados"
+          throw new Error(fallbackMessage)
+        }
+      }
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Falha ao importar dados")
+      }
+
+      setImportSummary(data.summary || null)
+
+      toast({
+        title: "Importação concluída",
+        description:
+          data.summary
+            ? `${data.summary.colaboradoresCriados} colaborador(es) e ${data.summary.documentosImportados} documento(s) importados.`
+            : "Dados importados com sucesso.",
+      })
+    } catch (error) {
+      console.error("Erro ao importar dados:", error)
+      toast({
+        title: "Erro na importação",
+        description: error instanceof Error ? error.message : "Não foi possível importar o arquivo.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      void handleImportData(file)
+      event.target.value = ""
+    }
+  }
 
   const handleSaveConfiguracoes = async () => {
     setIsLoading(true)
@@ -82,6 +158,73 @@ export function ConfiguracoesSection() {
           </Button>
         </div>
       </div>
+
+      {/* Importação em massa de dados */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-foreground flex items-center gap-2">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M4 12l2.586-2.586a2 2 0 012.828 0L12 12m0 0l2.586-2.586a2 2 0 012.828 0L20 12m-8 0v8"
+              />
+            </svg>
+            Importar Dados
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Faça o upload de um arquivo <span className="font-medium text-foreground">.zip</span> contendo uma pasta raiz e
+            subpastas com o nome de cada colaborador. Dentro de cada subpasta devem estar os documentos em PDF que serão
+            importados automaticamente.
+          </p>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".zip"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" onClick={() => fileInputRef.current?.click()} disabled={isImporting}>
+              {isImporting ? "Importando..." : "Selecionar arquivo"}
+            </Button>
+            {selectedFileName && (
+              <Badge variant="outline" className="max-w-xs truncate">
+                {selectedFileName}
+              </Badge>
+            )}
+          </div>
+
+          {importSummary && (
+            <div className="rounded-md border border-border bg-muted/50 p-4 text-sm space-y-2">
+              <div className="flex flex-col gap-1">
+                <span className="font-medium text-foreground">Resumo da importação</span>
+                <span className="text-muted-foreground">
+                  {importSummary.colaboradoresCriados} colaborador(es) criado(s) e {importSummary.documentosImportados} documento(s)
+                  importado(s).
+                </span>
+              </div>
+              {importSummary.erros.length > 0 && (
+                <div className="space-y-1">
+                  <span className="font-medium text-destructive">Ocorreram alguns avisos:</span>
+                  <ul className="list-disc space-y-1 pl-5 text-destructive">
+                    {importSummary.erros.map((erro, index) => (
+                      <li key={`${erro}-${index}`} className="text-xs sm:text-sm">
+                        {erro}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Configurações de Aparência */}
       <Card>
