@@ -1,18 +1,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createServiceClient } from '@/lib/auth'
+import { createServiceClient, getAuthUser } from '@/lib/auth'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar autenticação
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
+    const authUser = await getAuthUser()
+
+    if (!authUser) {
       return NextResponse.json(
         { error: 'Não autorizado' },
         { status: 401 }

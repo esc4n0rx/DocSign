@@ -1,39 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createServiceClient } from '@/lib/auth'
+import { createServiceClient, getAuthUser } from '@/lib/auth'
 import { uploadFileBuffer } from '@/lib/storage-api'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar autenticação
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
+    const authUser = await getAuthUser()
+
+    if (!authUser) {
       return NextResponse.json(
         { error: 'Não autorizado' },
         { status: 401 }
       )
     }
 
-    const serviceSupabase = createServiceClient()
-    
-    // Verificar permissões
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (!currentUserData || !['Admin', 'Editor'].includes(currentUserData.permissao)) {
+    if (!authUser.usuario || !['Admin', 'Editor'].includes(authUser.usuario.permissao)) {
       return NextResponse.json(
         { error: 'Apenas administradores e editores podem fazer upload de documentos' },
         { status: 403 }
       )
     }
+
+    const serviceSupabase = createServiceClient()
 
     // Parse do FormData
     const formData = await request.formData()
@@ -107,6 +96,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const sanitizedBaseUrl = (process.env.STORAGE_API_URL || 'https://api.poupadin.space').replace(/\/$/, '')
+    const fileUrl = uploadResult.fileUrl || `${sanitizedBaseUrl}/files/${folderName}/${uploadResult.fileName}`
+
     // Salvar metadados no banco (com novos campos de storage)
     console.log('Salvando metadados no banco de dados...')
     const { data: documento, error: dbError } = await serviceSupabase
@@ -119,7 +111,8 @@ export async function POST(request: NextRequest) {
         tamanho: file.size,
         categoria: categoria,
         storage_folder: folderName,
-        storage_filename: uploadResult.fileName!
+        storage_filename: uploadResult.fileName!,
+        url: fileUrl
       })
       .select()
       .single()

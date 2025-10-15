@@ -1,38 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createServiceClient } from '@/lib/auth'
+import { createServiceClient, getAuthUser } from '@/lib/auth'
 import { deleteColaboradorFolder, deleteFile, createColaboradorFolder } from '@/lib/storage-api'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar se o usuário atual tem permissão
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
+    const authUser = await getAuthUser()
+
+    if (!authUser) {
       return NextResponse.json(
         { error: 'Não autorizado' },
         { status: 401 }
       )
     }
 
-    const serviceSupabase = createServiceClient()
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (!currentUserData || !['Admin', 'Editor'].includes(currentUserData.permissao)) {
+    if (!authUser.usuario || !['Admin', 'Editor'].includes(authUser.usuario.permissao)) {
       return NextResponse.json(
         { error: 'Apenas administradores e editores podem remover colaboradores' },
         { status: 403 }
       )
     }
 
+    const serviceSupabase = createServiceClient()
     const colaboradorId = parseInt(params.id)
 
     if (isNaN(colaboradorId)) {
@@ -141,32 +131,23 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const supabase = await createClient()
-    
-    // Verificar se o usuário atual tem permissão
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
+    const authUser = await getAuthUser()
+
+    if (!authUser) {
       return NextResponse.json(
         { error: 'Não autorizado' },
         { status: 401 }
       )
     }
 
-    const serviceSupabase = createServiceClient()
-    const { data: currentUserData } = await serviceSupabase
-      .from('usuarios')
-      .select('permissao')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (!currentUserData || !['Admin', 'Editor'].includes(currentUserData.permissao)) {
+    if (!authUser.usuario || !['Admin', 'Editor'].includes(authUser.usuario.permissao)) {
       return NextResponse.json(
         { error: 'Apenas administradores e editores podem editar colaboradores' },
         { status: 403 }
       )
     }
 
+    const serviceSupabase = createServiceClient()
     const colaboradorId = parseInt(params.id)
 
     if (isNaN(colaboradorId)) {
