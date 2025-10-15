@@ -4,7 +4,9 @@ import { inflateRawSync } from 'zlib'
 import { createServiceClient, getAuthUser } from '@/lib/auth'
 import { createColaboradorFolder, uploadFileBuffer } from '@/lib/storage-api'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+export const runtime = 'nodejs'
+
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 
 type ZipEntry = {
   path: string
@@ -223,7 +225,16 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const fileBuffer = Buffer.from(arrayBuffer)
 
-    const zipEntries = extractZipEntries(fileBuffer)
+    let zipEntries: ZipEntry[]
+    try {
+      zipEntries = extractZipEntries(fileBuffer)
+    } catch (zipError) {
+      console.error('Falha ao ler arquivo ZIP:', zipError)
+      return NextResponse.json(
+        { error: 'Não foi possível ler o arquivo .zip informado. Verifique o formato e tente novamente.' },
+        { status: 400 },
+      )
+    }
 
     const errors: string[] = []
     const collaboratorFiles = buildCollaboratorMap(zipEntries, errors)
@@ -235,7 +246,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Configuração do Supabase ausente para importação em massa.')
+      return NextResponse.json(
+        { error: 'Configuração do banco de dados indisponível. Contate o administrador do sistema.' },
+        { status: 500 },
+      )
+    }
+
     const serviceSupabase = createServiceClient()
+
+    const storageApiConfigured = Boolean(process.env.STORAGE_API_URL && process.env.STORAGE_API_TOKEN)
 
     const { data: existingMatricula } = await serviceSupabase
       .from('colaboradores')
@@ -287,8 +311,16 @@ export async function POST(request: NextRequest) {
 
       colaboradoresCriados += 1
 
-      const folderResult = await createColaboradorFolder(colaborador.id, matricula)
       const folderName = `${matricula}_${colaborador.id}`
+
+      if (!storageApiConfigured) {
+        errors.push(
+          `Colaborador "${collaboratorName}" criado, mas a API de armazenamento não está configurada para receber documentos.`,
+        )
+        continue
+      }
+
+      const folderResult = await createColaboradorFolder(colaborador.id, matricula)
 
       if (!folderResult.success) {
         errors.push(`Colaborador "${collaboratorName}" criado, mas não foi possível gerar a pasta de documentos.`)

@@ -64,7 +64,22 @@ export function ConfiguracoesSection() {
         body: formData,
       })
 
-      const data = await response.json()
+      const contentType = response.headers.get("content-type") || ""
+      let data: any = null
+      if (contentType.includes("application/json")) {
+        data = await response.json()
+      } else {
+        const rawPayload = (await response.text()).trim()
+        try {
+          data = JSON.parse(rawPayload)
+        } catch (parseError) {
+          const isLikelyHtml = rawPayload.startsWith("<")
+          const fallbackMessage = isLikelyHtml
+            ? "Resposta inesperada do servidor durante a importação."
+            : rawPayload || "Falha ao importar dados"
+          throw new Error(fallbackMessage)
+        }
+      }
 
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Falha ao importar dados")
