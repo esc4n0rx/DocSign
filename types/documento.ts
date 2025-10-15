@@ -6,6 +6,7 @@ export interface Documento {
   tipo: string
   tamanho: number
   categoria?: string
+  url?: string
   // Campos antigos do Cloudinary (manter para migração)
   cloudinary_public_id?: string
   cloudinary_url?: string

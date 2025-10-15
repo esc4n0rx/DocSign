@@ -22,6 +22,8 @@ interface FileUploadResponse {
   files: string[]
 }
 
+const sanitizeBaseUrl = (baseUrl: string) => baseUrl.replace(/\/$/, '')
+
 /**
  * Cria uma pasta no sistema de armazenamento
  * @param folderName - Nome da pasta a ser criada
@@ -111,11 +113,15 @@ export async function uploadFile(
 
     console.log(`Upload bem-sucedido: ${fileName}`)
 
+    const sanitizedBaseUrl = sanitizeBaseUrl(API_BASE_URL)
+    const storedFileName = result.files[0]
+
     return {
       success: true,
-      fileName: result.files[0], // Nome do arquivo salvo na API
+      fileName: storedFileName, // Nome do arquivo salvo na API
       originalFileName,
       folderName,
+      fileUrl: `${sanitizedBaseUrl}/files/${folderName}/${storedFileName}`,
       message: result.message
     }
   } catch (error) {
@@ -143,7 +149,6 @@ export async function uploadFileBuffer(
 ) {
   // Gerar nome único para o arquivo
   const timestamp = Date.now()
-  const extension = fileName.split('.').pop() || 'bin'
   const uniqueFileName = `${timestamp}-${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`
 
   return await uploadFile(fileBuffer, uniqueFileName, folderPath, fileName)

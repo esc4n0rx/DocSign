@@ -96,6 +96,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const sanitizedBaseUrl = (process.env.STORAGE_API_URL || 'https://api.poupadin.space').replace(/\/$/, '')
+    const fileUrl = uploadResult.fileUrl || `${sanitizedBaseUrl}/files/${folderName}/${uploadResult.fileName}`
+
     // Salvar metadados no banco (com novos campos de storage)
     console.log('Salvando metadados no banco de dados...')
     const { data: documento, error: dbError } = await serviceSupabase
@@ -108,7 +111,8 @@ export async function POST(request: NextRequest) {
         tamanho: file.size,
         categoria: categoria,
         storage_folder: folderName,
-        storage_filename: uploadResult.fileName!
+        storage_filename: uploadResult.fileName!,
+        url: fileUrl
       })
       .select()
       .single()
