@@ -19,10 +19,30 @@ type CollaboratorFiles = {
   buffer: Buffer
 }
 
+type ImportMode = 'preview' | 'import'
+
+interface ImportSummaryDetail {
+  nome: string
+  matricula?: string
+  documentos: number
+  mensagens: string[]
+  sucesso: boolean
+}
+
 interface ImportSummary {
   colaboradoresCriados: number
   documentosImportados: number
   erros: string[]
+  detalhes: ImportSummaryDetail[]
+}
+
+interface ImportPreview {
+  totalColaboradores: number
+  totalDocumentos: number
+  colaboradores: {
+    nome: string
+    arquivos: string[]
+  }[]
 }
 
 const ALLOWED_EXTENSION = '.zip'
@@ -207,6 +227,9 @@ export async function POST(request: NextRequest) {
     }
 
     const formData = await request.formData()
+    const modeValue = formData.get('mode')
+    const mode: ImportMode =
+      typeof modeValue === 'string' && modeValue.toLowerCase() === 'preview' ? 'preview' : 'import'
     const file = formData.get('file') as File | null
 
     if (!file) {
@@ -221,6 +244,12 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
+
+    console.info('[colaboradores/import] Arquivo recebido para processamento', {
+      nome: file.name,
+      modo: mode,
+      tamanho: file.size,
+    })
 
     const arrayBuffer = await file.arrayBuffer()
     const fileBuffer = Buffer.from(arrayBuffer)
@@ -239,11 +268,29 @@ export async function POST(request: NextRequest) {
     const errors: string[] = []
     const collaboratorFiles = buildCollaboratorMap(zipEntries, errors)
 
+    const previewData: ImportPreview = {
+      totalColaboradores: collaboratorFiles.size,
+      totalDocumentos: Array.from(collaboratorFiles.values()).reduce((total, files) => total + files.length, 0),
+      colaboradores: Array.from(collaboratorFiles.entries()).map(([collaboratorName, files]) => ({
+        nome: collaboratorName,
+        arquivos: files.map((fileEntry) => fileEntry.fileName),
+      })),
+    }
+
     if (collaboratorFiles.size === 0) {
       return NextResponse.json(
         { error: 'Nenhum colaborador válido encontrado no arquivo informado.' },
         { status: 400 },
       )
+    }
+
+    if (mode === 'preview') {
+      console.info('[colaboradores/import] Pré-visualização concluída', {
+        colaboradores: previewData.totalColaboradores,
+        documentos: previewData.totalDocumentos,
+      })
+
+      return NextResponse.json({ success: true, preview: previewData, warnings: errors })
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -273,12 +320,28 @@ export async function POST(request: NextRequest) {
       nextMatriculaNumber = extractNumeric(existingMatricula[0].matricula) + 1
     }
 
+    console.info('[colaboradores/import] Iniciando importação em massa', {
+      colaboradores: collaboratorFiles.size,
+      documentos: previewData.totalDocumentos,
+    })
+
     let colaboradoresCriados = 0
     let documentosImportados = 0
+    const detalhes: ImportSummaryDetail[] = []
 
     for (const [collaboratorName, files] of collaboratorFiles.entries()) {
+      const detalhe: ImportSummaryDetail = {
+        nome: collaboratorName,
+        matricula: undefined,
+        documentos: 0,
+        mensagens: [],
+        sucesso: false,
+      }
+
       if (!files || files.length === 0) {
         errors.push(`Nenhum documento encontrado para o colaborador "${collaboratorName}".`)
+        detalhe.mensagens.push('Nenhum documento em PDF encontrado para importação.')
+        detalhes.push(detalhe)
         continue
       }
 
@@ -306,10 +369,14 @@ export async function POST(request: NextRequest) {
 
       if (createError || !colaborador) {
         errors.push(`Falha ao criar o colaborador "${collaboratorName}".`)
+        detalhe.mensagens.push('Falha ao criar o registro no banco de dados.')
+        detalhes.push(detalhe)
         continue
       }
 
       colaboradoresCriados += 1
+      detalhe.matricula = matricula
+      detalhe.sucesso = true
 
       const folderName = `${matricula}_${colaborador.id}`
 
@@ -317,6 +384,8 @@ export async function POST(request: NextRequest) {
         errors.push(
           `Colaborador "${collaboratorName}" criado, mas a API de armazenamento não está configurada para receber documentos.`,
         )
+        detalhe.mensagens.push('API de armazenamento não configurada para receber documentos.')
+        detalhes.push(detalhe)
         continue
       }
 
@@ -324,6 +393,7 @@ export async function POST(request: NextRequest) {
 
       if (!folderResult.success) {
         errors.push(`Colaborador "${collaboratorName}" criado, mas não foi possível gerar a pasta de documentos.`)
+        detalhe.mensagens.push('Não foi possível criar a pasta de documentos no armazenamento.')
       } else if (folderResult.folderName) {
         await serviceSupabase
           .from('colaboradores')
@@ -331,6 +401,7 @@ export async function POST(request: NextRequest) {
           .eq('id', colaborador.id)
       }
 
+      let documentosImportadosPorColaborador = 0
       for (const fileData of files) {
         try {
           const uploadResult = await uploadFileBuffer(fileData.buffer, fileData.fileName, folderName, 'application/pdf')
@@ -339,6 +410,7 @@ export async function POST(request: NextRequest) {
             errors.push(
               `Falha ao enviar o arquivo "${fileData.fileName}" do colaborador "${collaboratorName}".`,
             )
+            detalhe.mensagens.push(`Falha ao enviar o arquivo ${fileData.fileName}.`)
             continue
           }
 
@@ -363,23 +435,32 @@ export async function POST(request: NextRequest) {
             errors.push(
               `Arquivo "${fileData.fileName}" enviado, mas não foi possível salvar no banco de dados para o colaborador "${collaboratorName}".`,
             )
+            detalhe.mensagens.push(
+              `Arquivo ${fileData.fileName} enviado, mas não foi possível salvar no banco de dados.`,
+            )
             continue
           }
 
           documentosImportados += 1
+          documentosImportadosPorColaborador += 1
         } catch (error) {
           console.error('Erro ao processar arquivo importado:', error)
           errors.push(
             `Erro inesperado ao importar o arquivo "${fileData.fileName}" do colaborador "${collaboratorName}".`,
           )
+          detalhe.mensagens.push(`Erro inesperado ao importar o arquivo ${fileData.fileName}.`)
         }
       }
+
+      detalhe.documentos = documentosImportadosPorColaborador
+      detalhes.push(detalhe)
     }
 
     const summary: ImportSummary = {
       colaboradoresCriados,
       documentosImportados,
       erros: errors,
+      detalhes,
     }
 
     if (colaboradoresCriados === 0) {
@@ -392,6 +473,12 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
+
+    console.info('[colaboradores/import] Importação concluída', {
+      colaboradoresCriados,
+      documentosImportados,
+      erros: errors.length,
+    })
 
     return NextResponse.json({ success: true, summary })
   } catch (error) {
